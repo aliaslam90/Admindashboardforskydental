@@ -54,7 +54,8 @@ services:
     depends_on:
       - backend
     environment:
-      - NEXT_PUBLIC_API_URL=http://localhost:3001
+      # Vite expects VITE_*, also ensure /api prefix matches Nest global prefix
+      - VITE_API_URL=http://localhost:3001/api
     ports:
       - "3000:3000"
     volumes:

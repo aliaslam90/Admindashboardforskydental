@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { Plus, Search, Filter, MoreVertical, Calendar as CalendarIcon, Edit, Ban, CheckCircle2 } from 'lucide-react';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
@@ -8,7 +8,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '.
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from '../components/ui/dropdown-menu';
 import { StatusBadge } from '../components/StatusBadge';
 import { AppointmentDrawer } from '../components/AppointmentDrawer';
-import { mockAppointments, mockDoctors, mockServices, Appointment, AppointmentStatus } from '../data/mockData';
+import { mockDoctors, mockServices, Appointment, AppointmentStatus } from '../data/mockData';
+import { appointmentsApi } from '../services/appointmentsApi';
 import { toast } from 'sonner';
 
 interface AppointmentsProps {
@@ -17,9 +18,10 @@ interface AppointmentsProps {
 }
 
 export function Appointments({ onCreateAppointment, selectedAppointmentId }: AppointmentsProps) {
-  const [appointments, setAppointments] = useState<Appointment[]>(mockAppointments);
+  const [appointments, setAppointments] = useState<Appointment[]>([]);
   const [selectedAppointment, setSelectedAppointment] = useState<Appointment | null>(null);
   const [drawerOpen, setDrawerOpen] = useState(false);
+  const [loading, setLoading] = useState(true);
   
   // Filters
   const [searchQuery, setSearchQuery] = useState('');
@@ -29,16 +31,34 @@ export function Appointments({ onCreateAppointment, selectedAppointmentId }: App
   const [dateFrom, setDateFrom] = useState('');
   const [dateTo, setDateTo] = useState('');
 
+  // Fetch appointments on mount and when filters change
+  useEffect(() => {
+    fetchAppointments();
+  }, []);
+
   // Open drawer for selected appointment
-  useState(() => {
-    if (selectedAppointmentId) {
+  useEffect(() => {
+    if (selectedAppointmentId && appointments.length > 0) {
       const apt = appointments.find(a => a.id === selectedAppointmentId);
       if (apt) {
         setSelectedAppointment(apt);
         setDrawerOpen(true);
       }
     }
-  });
+  }, [selectedAppointmentId, appointments]);
+
+  const fetchAppointments = async () => {
+    try {
+      setLoading(true);
+      const data = await appointmentsApi.getAll();
+      setAppointments(data);
+    } catch (error) {
+      console.error('Failed to fetch appointments:', error);
+      toast.error('Failed to load appointments');
+    } finally {
+      setLoading(false);
+    }
+  };
 
   // Filtered appointments
   const filteredAppointments = useMemo(() => {
@@ -96,26 +116,50 @@ export function Appointments({ onCreateAppointment, selectedAppointmentId }: App
     setDrawerOpen(true);
   };
 
-  const updateAppointmentStatus = (id: string, status: AppointmentStatus) => {
-    setAppointments(prev => 
-      prev.map(apt => 
-        apt.id === id 
-          ? { ...apt, status, updatedAt: new Date().toISOString() }
-          : apt
-      )
-    );
+  const updateAppointmentStatus = async (id: string, status: AppointmentStatus) => {
+    try {
+      const updatedAppointment = await appointmentsApi.updateStatus(id, status);
+      setAppointments(prev => 
+        prev.map(apt => 
+          apt.id === id ? updatedAppointment : apt
+        )
+      );
+      // Update selected appointment if it's the one being updated
+      if (selectedAppointment?.id === id) {
+        setSelectedAppointment(updatedAppointment);
+      }
+    } catch (error) {
+      console.error('Failed to update appointment status:', error);
+      toast.error('Failed to update appointment status');
+      throw error;
+    }
   };
 
-  const handleConfirm = (id: string) => {
-    updateAppointmentStatus(id, 'confirmed');
+  const handleConfirm = async (id: string) => {
+    try {
+      await updateAppointmentStatus(id, 'confirmed');
+      toast.success('Appointment confirmed');
+    } catch (error) {
+      // Error already handled in updateAppointmentStatus
+    }
   };
 
-  const handleCheckIn = (id: string) => {
-    updateAppointmentStatus(id, 'checked-in');
+  const handleCheckIn = async (id: string) => {
+    try {
+      await updateAppointmentStatus(id, 'checked-in');
+      toast.success('Patient checked in');
+    } catch (error) {
+      // Error already handled
+    }
   };
 
-  const handleComplete = (id: string) => {
-    updateAppointmentStatus(id, 'completed');
+  const handleComplete = async (id: string) => {
+    try {
+      await updateAppointmentStatus(id, 'completed');
+      toast.success('Appointment completed');
+    } catch (error) {
+      // Error already handled
+    }
   };
 
   const handleReschedule = (id: string) => {
@@ -128,11 +172,10 @@ export function Appointments({ onCreateAppointment, selectedAppointmentId }: App
     toast.info('Cancel confirmation modal would open here');
   };
 
-  const handleQuickAction = (appointment: Appointment, action: string) => {
+  const handleQuickAction = async (appointment: Appointment, action: string) => {
     switch (action) {
       case 'confirm':
-        updateAppointmentStatus(appointment.id, 'confirmed');
-        toast.success('Appointment confirmed');
+        await handleConfirm(appointment.id);
         break;
       case 'reschedule':
         handleReschedule(appointment.id);
@@ -284,7 +327,12 @@ export function Appointments({ onCreateAppointment, selectedAppointmentId }: App
           </div>
         </CardHeader>
         <CardContent>
-          {sortedAppointments.length === 0 ? (
+          {loading ? (
+            <div className="text-center py-12">
+              <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
+              <p className="text-sm text-gray-500">Loading appointments...</p>
+            </div>
+          ) : sortedAppointments.length === 0 ? (
             <div className="text-center py-12">
               <CalendarIcon className="h-12 w-12 text-gray-300 mx-auto mb-4" />
               <p className="text-sm text-gray-500">No appointments found</p>

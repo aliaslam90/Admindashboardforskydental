@@ -4,13 +4,23 @@ import {
   BadRequestException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
-import { Appointment } from './entities/appointment.entity';
+import { Repository, Between, Like } from 'typeorm';
+import { Appointment, AppointmentStatus } from './entities/appointment.entity';
 import { CreateAppointmentDto } from './dto/create-appointment.dto';
+import { CreateAppointmentWithPatientDto } from './dto/create-appointment-with-patient.dto';
 import { UpdateAppointmentDto } from './dto/update-appointment.dto';
 import { Patient } from '../patients/entities/patient.entity';
 import { Doctor } from '../doctors/entities/doctor.entity';
 import { Service } from '../services/entities/service.entity';
+
+export interface AppointmentFilters {
+  search?: string;
+  doctorId?: number;
+  serviceId?: number;
+  status?: AppointmentStatus;
+  dateFrom?: string;
+  dateTo?: string;
+}
 
 @Injectable()
 export class AppointmentsService {
@@ -81,11 +91,109 @@ export class AppointmentsService {
     }
   }
 
-  async findAll(): Promise<Appointment[]> {
-    return await this.appointmentRepository.find({
-      relations: ['patient', 'doctor', 'service'],
-      order: { start_datetime: 'DESC' },
-    });
+  async createWithPatient(
+    createDto: CreateAppointmentWithPatientDto,
+  ): Promise<Appointment> {
+    // Find or create patient
+    let patient: Patient | null;
+
+    if (createDto.patient.id) {
+      // Use existing patient
+      patient = await this.patientRepository.findOne({
+        where: { id: createDto.patient.id },
+      });
+      if (!patient) {
+        throw new NotFoundException(
+          `Patient with ID ${createDto.patient.id} not found`,
+        );
+      }
+    } else {
+      // Check if patient exists by phone
+      patient = await this.patientRepository.findOne({
+        where: { phone_number: createDto.patient.phone_number },
+      });
+
+      if (!patient) {
+        // Create new patient
+        const newPatient = this.patientRepository.create({
+          full_name: createDto.patient.full_name,
+          phone_number: createDto.patient.phone_number,
+          email: createDto.patient.email || '',
+        });
+        patient = await this.patientRepository.save(newPatient);
+      }
+    }
+
+    // Safety check (should never happen but keeps TS satisfied)
+    if (!patient) {
+      throw new NotFoundException('Patient could not be created or found');
+    }
+
+    // Now create the appointment with the patient_id
+    const appointmentDto: CreateAppointmentDto = {
+      patient_id: patient.id,
+      doctor_id: createDto.doctor_id,
+      service_id: createDto.service_id,
+      start_datetime: createDto.start_datetime,
+      end_datetime: createDto.end_datetime,
+      status: createDto.status,
+      notes: createDto.notes,
+    };
+
+    return this.create(appointmentDto);
+  }
+
+  async findAll(filters?: AppointmentFilters): Promise<Appointment[]> {
+    const queryBuilder = this.appointmentRepository
+      .createQueryBuilder('appointment')
+      .leftJoinAndSelect('appointment.patient', 'patient')
+      .leftJoinAndSelect('appointment.doctor', 'doctor')
+      .leftJoinAndSelect('appointment.service', 'service');
+
+    // Apply filters
+    if (filters?.doctorId) {
+      queryBuilder.andWhere('appointment.doctor_id = :doctorId', {
+        doctorId: filters.doctorId,
+      });
+    }
+
+    if (filters?.serviceId) {
+      queryBuilder.andWhere('appointment.service_id = :serviceId', {
+        serviceId: filters.serviceId,
+      });
+    }
+
+    if (filters?.status) {
+      queryBuilder.andWhere('appointment.status = :status', {
+        status: filters.status,
+      });
+    }
+
+    if (filters?.dateFrom) {
+      queryBuilder.andWhere('appointment.start_datetime >= :dateFrom', {
+        dateFrom: new Date(filters.dateFrom),
+      });
+    }
+
+    if (filters?.dateTo) {
+      // Add 1 day to include the entire end date
+      const endDate = new Date(filters.dateTo);
+      endDate.setDate(endDate.getDate() + 1);
+      queryBuilder.andWhere('appointment.start_datetime < :dateTo', {
+        dateTo: endDate,
+      });
+    }
+
+    if (filters?.search) {
+      queryBuilder.andWhere(
+        '(patient.full_name ILIKE :search OR patient.phone_number ILIKE :search OR appointment.id::text ILIKE :search)',
+        { search: `%${filters.search}%` },
+      );
+    }
+
+    queryBuilder.orderBy('appointment.start_datetime', 'DESC');
+
+    return await queryBuilder.getMany();
   }
 
   async findOne(id: string): Promise<Appointment> {
@@ -172,6 +280,23 @@ export class AppointmentsService {
     } catch (error) {
       throw new BadRequestException(
         `Failed to update appointment: ${error.message}`,
+      );
+    }
+  }
+
+  async updateStatus(
+    id: string,
+    status: AppointmentStatus,
+  ): Promise<Appointment> {
+    const appointment = await this.findOne(id);
+    appointment.status = status;
+
+    try {
+      await this.appointmentRepository.save(appointment);
+      return this.findOne(id);
+    } catch (error) {
+      throw new BadRequestException(
+        `Failed to update appointment status: ${error.message}`,
       );
     }
   }
