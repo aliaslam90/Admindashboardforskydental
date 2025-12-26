@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Toaster } from './components/ui/sonner';
 import { DataProvider, useData } from './contexts/DataContext';
 import { SyncIndicator } from './components/SyncIndicator';
@@ -25,12 +25,15 @@ import { Input } from './components/ui/input';
 import { Label } from './components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './components/ui/select';
 import { Textarea } from './components/ui/textarea';
-import { mockDoctors, mockServices, mockAdmins, Admin, Doctor } from './data/mockData';
+import { mockDoctors, mockServices, mockAdmins, Admin, Doctor, Appointment } from './data/mockData';
 import { toast } from 'sonner';
 
 type Page = 'dashboard' | 'appointments' | 'calendar' | 'patients' | 'doctors' | 'services' | 'notifications' | 'settings';
 type DoctorPage = 'appointments' | 'calendar' | 'patients' | 'profile';
 type AuthPage = 'admin-login' | 'doctor-login' | 'forgot-password' | 'admin-dashboard' | 'doctor-dashboard';
+
+const AUTH_STORAGE_KEY = 'skydental_auth_state';
+type NewAppointmentInput = Omit<Appointment, 'id'> & { email?: string; duration?: number };
 
 function AppContent() {
   const { createAppointment } = useData();
@@ -41,6 +44,7 @@ function AppContent() {
   const [doctorPage, setDoctorPage] = useState<DoctorPage>('appointments');
   const [pageData, setPageData] = useState<any>(null);
   const [createAppointmentOpen, setCreateAppointmentOpen] = useState(false);
+  const [isBootstrapping, setIsBootstrapping] = useState(true);
 
   // Create appointment form state
   const [appointmentForm, setAppointmentForm] = useState({
@@ -54,10 +58,46 @@ function AppContent() {
     notes: ''
   });
 
-  const handleNavigate = (page: Page, data?: any) => {
-    setCurrentPage(page);
+  const handleNavigate = (page: Page | string, data?: any) => {
+    setCurrentPage(page as Page);
     setPageData(data || null);
   };
+
+  // Restore login context on refresh
+  useEffect(() => {
+    const savedState = localStorage.getItem(AUTH_STORAGE_KEY);
+    if (!savedState) {
+      setIsBootstrapping(false);
+      return;
+    }
+    try {
+      const parsed = JSON.parse(savedState);
+      if (parsed.currentAdmin) {
+        setCurrentAdmin(parsed.currentAdmin);
+        setAuthPage('admin-dashboard');
+      } else if (parsed.currentDoctor) {
+        setCurrentDoctor(parsed.currentDoctor);
+        setAuthPage('doctor-dashboard');
+      }
+      if (parsed.currentPage) setCurrentPage(parsed.currentPage);
+      if (parsed.doctorPage) setDoctorPage(parsed.doctorPage);
+    } catch {
+      // Ignore malformed storage
+    } finally {
+      setIsBootstrapping(false);
+    }
+  }, []);
+
+  // Persist login context for reloads
+  useEffect(() => {
+    const payload = {
+      currentAdmin,
+      currentDoctor,
+      currentPage,
+      doctorPage,
+    };
+    localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(payload));
+  }, [currentAdmin, currentDoctor, currentPage, doctorPage]);
 
   const handleCreateAppointment = () => {
     setCreateAppointmentOpen(true);
@@ -111,12 +151,11 @@ function AppContent() {
         return;
       }
 
-      // Create appointment using DataContext
-      await createAppointment({
+      const newAppointment: NewAppointmentInput = {
         patientId: `PAT${Date.now()}`,
         patientName: appointmentForm.patientName,
         phone: appointmentForm.phone,
-        email: appointmentForm.email,
+        email: appointmentForm.email || undefined,
         doctorId: appointmentForm.doctorId,
         doctorName: doctor.name,
         serviceId: appointmentForm.serviceId,
@@ -127,10 +166,13 @@ function AppContent() {
         status: 'booked',
         notes: appointmentForm.notes,
         clinicalNotes: '',
-        prescription: null,
+        prescription: undefined,
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString()
-      });
+      };
+
+      // Create appointment using DataContext
+      await createAppointment(newAppointment);
 
       setCreateAppointmentOpen(false);
       setCurrentPage('appointments');
@@ -139,7 +181,7 @@ function AppContent() {
     }
   };
 
-  const handleAdminLogin = (email: string, password: string) => {
+  const handleAdminLogin = (email: string, _password: string) => {
     // Find admin by email
     const admin = mockAdmins.find(a => a.email === email);
     
@@ -152,7 +194,7 @@ function AppContent() {
     }
   };
 
-  const handleDoctorLogin = (email: string, password: string) => {
+  const handleDoctorLogin = (email: string, _password: string) => {
     // Find doctor by email
     const doctor = mockDoctors.find(d => d.email === email);
     
@@ -170,15 +212,8 @@ function AppContent() {
     setCurrentDoctor(null);
     setAuthPage('admin-login');
     setCurrentPage('dashboard');
+    localStorage.removeItem(AUTH_STORAGE_KEY);
     toast.success('Logged out successfully');
-  };
-
-  const handleForgotPassword = () => {
-    setAuthPage('forgot-password');
-  };
-
-  const handleBackToLogin = () => {
-    setAuthPage('admin-login');
   };
 
   const renderPage = () => {
@@ -226,9 +261,9 @@ function AppContent() {
 
   return (
     <>
-      {authPage === 'admin-login' && <Login onLogin={handleAdminLogin} onForgotPassword={() => setAuthPage('forgot-password')} onSwitchToDoctor={() => setAuthPage('doctor-login')} />}
-      {authPage === 'doctor-login' && <DoctorLogin onLogin={handleDoctorLogin} onForgotPassword={() => setAuthPage('forgot-password')} onSwitchToAdmin={() => setAuthPage('admin-login')} />}
-      {authPage === 'forgot-password' && <ForgotPassword onBackToLogin={() => setAuthPage('admin-login')} />}
+      {!isBootstrapping && authPage === 'admin-login' && <Login onLogin={handleAdminLogin} onForgotPassword={() => setAuthPage('forgot-password')} onSwitchToDoctor={() => setAuthPage('doctor-login')} />}
+      {!isBootstrapping && authPage === 'doctor-login' && <DoctorLogin onLogin={handleDoctorLogin} onSwitchToAdmin={() => setAuthPage('admin-login')} />}
+      {!isBootstrapping && authPage === 'forgot-password' && <ForgotPassword onBackToLogin={() => setAuthPage('admin-login')} />}
 
       {authPage === 'admin-dashboard' && (
         <DashboardLayout currentPage={currentPage} onNavigate={handleNavigate} currentAdmin={currentAdmin!} onLogout={handleLogout}>
@@ -237,7 +272,7 @@ function AppContent() {
       )}
 
       {authPage === 'doctor-dashboard' && (
-        <DoctorLayout currentPage={doctorPage} onNavigate={setDoctorPage} currentDoctor={currentDoctor!} onLogout={handleLogout}>
+        <DoctorLayout currentPage={doctorPage} onNavigate={(page) => setDoctorPage(page as DoctorPage)} currentDoctor={currentDoctor!} onLogout={handleLogout}>
           {renderDoctorPage()}
         </DoctorLayout>
       )}

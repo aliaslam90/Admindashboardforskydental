@@ -59,7 +59,9 @@ interface DataContextType {
 
   // Appointment Actions
   updateAppointment: (id: string, updates: Partial<Appointment>) => Promise<void>;
-  createAppointment: (appointment: Omit<Appointment, 'id'>) => Promise<Appointment>;
+  createAppointment: (
+    appointment: Omit<Appointment, 'id'> & { email?: string; duration?: number },
+  ) => Promise<Appointment>;
   deleteAppointment: (id: string) => Promise<void>;
   
   // Doctor Actions
@@ -229,7 +231,9 @@ export function DataProvider({ children }: { children: ReactNode }) {
    * API: POST /api/appointments
    * Creates new appointment and notifies relevant users
    */
-  const createAppointment = async (appointmentData: Omit<Appointment, 'id'>): Promise<Appointment> => {
+  const createAppointment = async (
+    appointmentData: Omit<Appointment, 'id'> & { email?: string; duration?: number },
+  ): Promise<Appointment> => {
     setSyncState({ isSyncing: true, lastSyncTime: null, syncMessage: 'Creating appointment...' });
     
     try {

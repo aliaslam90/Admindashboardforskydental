@@ -4,6 +4,8 @@ import { Repository } from 'typeorm';
 import { Service } from '../services/entities/service.entity';
 import { Doctor } from '../doctors/entities/doctor.entity';
 import { DoctorLeave } from '../doctors/entities/doctor-leave.entity';
+import { User, UserRole } from '../users/entities/user.entity';
+import * as bcrypt from 'bcrypt';
 
 @Injectable()
 export class SeedService implements OnModuleInit {
@@ -16,6 +18,8 @@ export class SeedService implements OnModuleInit {
     private readonly doctorRepository: Repository<Doctor>,
     @InjectRepository(DoctorLeave)
     private readonly doctorLeaveRepository: Repository<DoctorLeave>,
+    @InjectRepository(User)
+    private readonly userRepository: Repository<User>,
   ) {}
 
   async onModuleInit() {
@@ -46,6 +50,7 @@ export class SeedService implements OnModuleInit {
   async seedAll() {
     this.logger.log('Starting database seeding...');
     try {
+      await this.seedAdminUser();
       await this.seedServices();
       await this.seedDoctors();
       this.logger.log('Database seeding completed successfully');
@@ -226,5 +231,36 @@ export class SeedService implements OnModuleInit {
       this.logger.error(`Error seeding doctors: ${error.message}`, error.stack);
       throw error;
     }
+  }
+
+  private async seedAdminUser() {
+    const adminEmail = process.env.DEFAULT_ADMIN_EMAIL ?? 'admin@skydentalclinic.com';
+    const adminPassword = process.env.DEFAULT_ADMIN_PASSWORD ?? 'admin123';
+    const adminPhone = process.env.DEFAULT_ADMIN_PHONE ?? '+971-50-123-4567';
+
+    const existingAdmin = await this.userRepository.findOne({
+      where: { email: adminEmail },
+    });
+
+    if (existingAdmin) {
+      this.logger.log('Admin user already exists. Skipping admin seed.');
+      return;
+    }
+
+    const hashedPassword = await bcrypt.hash(adminPassword, 10);
+
+    const adminUser = this.userRepository.create({
+      email: adminEmail,
+      password: hashedPassword,
+      full_name: 'Sky Dental Admin',
+      phone_number: adminPhone,
+      role: UserRole.ADMIN,
+      is_active: true,
+      email_verified: true,
+      last_login: new Date(),
+    });
+
+    await this.userRepository.save(adminUser);
+    this.logger.log(`Seeded default admin user (${adminEmail})`);
   }
 }

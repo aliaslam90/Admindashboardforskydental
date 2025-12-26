@@ -77,10 +77,12 @@ export interface Appointment {
   patientId: string;
   patientName: string;
   phone: string;
+  email?: string;
   doctorId: string;
   doctorName: string;
   serviceId: string;
   serviceName: string;
+  duration?: number;
   date: string;
   time: string;
   status: AppointmentStatus;
