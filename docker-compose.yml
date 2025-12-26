@@ -48,7 +48,7 @@ services:
 
   frontend:
     build:
-      context: ./frontend
+      context: ./front-end
       dockerfile: Dockerfile
     container_name: dental_frontend
     depends_on:
@@ -58,7 +58,7 @@ services:
     ports:
       - "3000:3000"
     volumes:
-      - ./frontend:/app
+      - ./front-end:/app
       - frontend_node_modules:/app/node_modules
       - /app/node_modules/.cache
     command: npm run dev
