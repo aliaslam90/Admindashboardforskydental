@@ -1,0 +1,44 @@
+version: "3.9"
+
+# Development docker-compose with volume mounts for hot-reload
+services:
+  postgres:
+    image: postgres:15
+    container_name: dental_postgres_dev
+    environment:
+      POSTGRES_DB: dental_db
+      POSTGRES_USER: dental_user
+      POSTGRES_PASSWORD: dental_pass
+    ports:
+      - "5432:5432"
+    volumes:
+      - pg_data_dev:/var/lib/postgresql/data
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile.dev
+    container_name: dental_backend_dev
+    depends_on:
+      - postgres
+    environment:
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_USERNAME: dental_user
+      DB_PASSWORD: dental_pass
+      DB_NAME: dental_db
+      NODE_ENV: development
+      PORT: 3003
+      JWT_SECRET: dev-secret-key
+      FRONTEND_URL: http://localhost:3000
+    ports:
+      - "3001:3003"
+    volumes:
+      - ./backend:/app
+      - /app/node_modules
+      - /app/dist
+    command: npm run start:dev
+
+volumes:
+  pg_data_dev:
+
