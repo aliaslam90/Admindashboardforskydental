@@ -1,4 +1,4 @@
-import { createContext, useContext, useState, useEffect, ReactNode } from 'react';
+import React, { createContext, useContext, useState, ReactNode } from 'react';
 import { 
   mockAppointments, 
   mockDoctors, 
@@ -10,7 +10,6 @@ import {
   Patient, 
   Service,
   Admin,
-  AppointmentStatus 
 } from '../data/mockData';
 import { toast } from 'sonner';
 
@@ -469,7 +468,11 @@ export function DataProvider({ children }: { children: ReactNode }) {
     syncData
   };
 
-  return <DataContext.Provider value={value}>{children}</DataContext.Provider>;
+  return (
+    <React.Fragment>
+      <DataContext.Provider value={value}>{children}</DataContext.Provider>
+    </React.Fragment>
+  );
 }
 
 export function useData() {

@@ -40,10 +40,19 @@ export class PatientsService {
     }
   }
 
-  async findAll(): Promise<Patient[]> {
-    return await this.patientRepository.find({
-      order: { created_at: 'DESC' },
-    });
+  async findAll(search?: string): Promise<Patient[]> {
+    const queryBuilder = this.patientRepository
+      .createQueryBuilder('patient')
+      .orderBy('patient.created_at', 'DESC');
+
+    if (search) {
+      queryBuilder.andWhere(
+        '(patient.full_name ILIKE :search OR patient.phone_number ILIKE :search OR patient.id::text ILIKE :search)',
+        { search: `%${search}%` },
+      );
+    }
+
+    return await queryBuilder.getMany();
   }
 
   async findOne(id: string): Promise<Patient> {

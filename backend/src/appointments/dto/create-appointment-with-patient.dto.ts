@@ -62,3 +62,4 @@ export class CreateAppointmentWithPatientDto {
   notes?: string;
 }
 
+

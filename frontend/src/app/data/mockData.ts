@@ -8,9 +8,12 @@ export interface Patient {
   phone: string;
   email?: string;
   totalVisits: number;
-  lastVisit: string;
+  lastVisit: string | null;
   flags: ('no-show-risk' | 'vip')[];
-  notes: string;
+  notes?: string;
+  emiratesIdLast4?: string;
+  createdAt?: string;
+  updatedAt?: string;
 }
 
 export interface Doctor {
@@ -146,7 +149,7 @@ export const mockPatients: Patient[] = [
     email: 'fatima.h@email.com',
     totalVisits: 5,
     lastVisit: '2025-12-18',
-    flags: [],
+    flags: ['no-show-risk'],
     notes: 'Allergic to penicillin'
   },
   {
@@ -176,6 +179,16 @@ export const mockPatients: Patient[] = [
     lastVisit: '2025-12-24',
     flags: ['vip'],
     notes: 'Regular cleaning every 3 months'
+  },
+  {
+    id: 'P006',
+    name: 'Lina Carter',
+    phone: '+971-56-678-9012',
+    email: 'lina.c@email.com',
+    totalVisits: 9,
+    lastVisit: '2025-12-23',
+    flags: ['vip', 'no-show-risk'],
+    notes: 'High-value client, occasionally late'
   }
 ];
 

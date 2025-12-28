@@ -59,6 +59,7 @@ export interface AppointmentFilters {
   status?: string;
   dateFrom?: string;
   dateTo?: string;
+  patientId?: string;
 }
 
 export interface CreateAppointmentPayload {
@@ -140,6 +141,7 @@ class AppointmentsApi {
     if (filters?.status) params.status = frontendToBackendStatus(filters.status as AppointmentStatus);
     if (filters?.dateFrom) params.dateFrom = filters.dateFrom;
     if (filters?.dateTo) params.dateTo = filters.dateTo;
+    if (filters?.patientId) params.patientId = filters.patientId;
 
     const backendAppointments = await apiClient.get<BackendAppointment[]>(
       '/appointments',

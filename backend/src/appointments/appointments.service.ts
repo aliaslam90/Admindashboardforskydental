@@ -20,6 +20,7 @@ export interface AppointmentFilters {
   status?: AppointmentStatus;
   dateFrom?: string;
   dateTo?: string;
+  patientId?: string;
 }
 
 @Injectable()
@@ -166,6 +167,12 @@ export class AppointmentsService {
     if (filters?.status) {
       queryBuilder.andWhere('appointment.status = :status', {
         status: filters.status,
+      });
+    }
+
+    if (filters?.patientId) {
+      queryBuilder.andWhere('appointment.patient_id = :patientId', {
+        patientId: filters.patientId,
       });
     }
 
