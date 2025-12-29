@@ -1,11 +1,11 @@
-import image_6ed9d1dbe20e8b3479eed332bf1c51ffbc9e9f7c from 'figma:asset/6ed9d1dbe20e8b3479eed332bf1c51ffbc9e9f7c.png';
+import image_6ed9d1dbe20e8b3479eed332bf1c51ffbc9e9f7c from '../../assets/6ed9d1dbe20e8b3479eed332bf1c51ffbc9e9f7c.png';
 import { useState } from 'react';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
 import { Label } from '../components/ui/label';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../components/ui/card';
 import { AlertCircle } from 'lucide-react';
-import logoImage from 'figma:asset/80004d1fc9e19baea80acbe314a05dbf7a3f4d62.png';
+import { ImageWithFallback } from '../components/figma/ImageWithFallback';
 
 interface LoginProps {
   onLogin: (email: string, password: string) => void;
@@ -53,7 +53,12 @@ export function Login({ onLogin, onForgotPassword, onSwitchToDoctor }: LoginProp
     <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 via-white to-blue-50 p-4 bg-[rgba(203,255,143,0.3)]">
       <Card className="w-full max-w-md">
         <CardHeader className="space-y-3 text-center">
-          <img src={image_6ed9d1dbe20e8b3479eed332bf1c51ffbc9e9f7c} alt="Sky Dental Center" className="mx-auto w-48 h-auto" />
+          <ImageWithFallback 
+            src={image_6ed9d1dbe20e8b3479eed332bf1c51ffbc9e9f7c} 
+            alt="Sky Dental Center" 
+            className="mx-auto w-48 h-auto"
+            fallbackIcon={<div className="mx-auto w-48 h-48 bg-gray-100 rounded-lg flex items-center justify-center text-gray-400">Logo</div>}
+          />
           <div>
             <CardDescription className="mt-2">
               Admin Dashboard Login

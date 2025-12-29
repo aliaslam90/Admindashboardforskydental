@@ -17,7 +17,7 @@ import { cn } from './ui/utils';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from './ui/dropdown-menu';
 import { NotificationCenter } from './NotificationCenter';
 import { Admin } from '../data/mockData';
-import logoImage from 'figma:asset/80004d1fc9e19baea80acbe314a05dbf7a3f4d62.png';
+import { ImageWithFallback } from './figma/ImageWithFallback';
 
 interface DashboardLayoutProps {
   children: ReactNode;
@@ -60,7 +60,12 @@ export function DashboardLayout({ children, currentPage, onNavigate, currentAdmi
           {/* Logo */}
           <div className="h-16 flex items-center justify-between px-6 border-b border-gray-200">
             <div className="flex items-center gap-3">
-              <img src={logoImage} alt="Sky Dental Center" className="h-10 w-auto" />
+              <ImageWithFallback 
+                src="/logo.png" 
+                alt="Sky Dental Center" 
+                className="h-10 w-auto"
+                fallbackIcon={<LayoutDashboard className="h-10 w-10 text-primary" />}
+              />
             </div>
             <button 
               onClick={() => setSidebarOpen(false)}
