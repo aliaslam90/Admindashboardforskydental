@@ -9,6 +9,7 @@ import {
   ParseIntPipe,
   HttpCode,
   HttpStatus,
+  Query,
 } from '@nestjs/common';
 import { DoctorsService } from './doctors.service';
 import { CreateDoctorDto } from './dto/create-doctor.dto';
@@ -29,6 +30,11 @@ export class DoctorsController {
   @Get()
   findAll() {
     return this.doctorsService.findAll();
+  }
+
+  @Get('services')
+  findServices() {
+    return this.doctorsService.findAllServices();
   }
 
   @Get(':id')

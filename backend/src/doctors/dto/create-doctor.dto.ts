@@ -7,9 +7,11 @@ import {
   MaxLength,
   IsOptional,
   ValidateNested,
+  IsEnum,
 } from 'class-validator';
 import { Type } from 'class-transformer';
 import { CreateDoctorLeaveDto } from './create-doctor-leave.dto';
+import { DoctorStatus } from '../entities/doctor.entity';
 
 export class CreateDoctorDto {
   @IsString()
@@ -23,6 +25,10 @@ export class CreateDoctorDto {
   @MinLength(1)
   @MaxLength(255)
   specialization: string;
+
+  @IsEnum(DoctorStatus)
+  @IsOptional()
+  status?: DoctorStatus;
 
   @IsArray()
   @IsString({ each: true })

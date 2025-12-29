@@ -5,12 +5,13 @@ import {
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
-import { Doctor } from './entities/doctor.entity';
+import { Doctor, DoctorStatus } from './entities/doctor.entity';
 import { DoctorLeave } from './entities/doctor-leave.entity';
 import { CreateDoctorDto } from './dto/create-doctor.dto';
 import { UpdateDoctorDto } from './dto/update-doctor.dto';
 import { CreateDoctorLeaveDto } from './dto/create-doctor-leave.dto';
 import { UpdateDoctorLeaveDto } from './dto/update-doctor-leave.dto';
+import { Service } from '../services/entities/service.entity';
 
 @Injectable()
 export class DoctorsService {
@@ -19,6 +20,8 @@ export class DoctorsService {
     private readonly doctorRepository: Repository<Doctor>,
     @InjectRepository(DoctorLeave)
     private readonly doctorLeaveRepository: Repository<DoctorLeave>,
+    @InjectRepository(Service)
+    private readonly serviceRepository: Repository<Service>,
   ) {}
 
   async create(createDoctorDto: CreateDoctorDto): Promise<Doctor> {
@@ -26,6 +29,7 @@ export class DoctorsService {
       const doctor = this.doctorRepository.create({
         name: createDoctorDto.name,
         specialization: createDoctorDto.specialization,
+        status: createDoctorDto.status || DoctorStatus.ACTIVE,
         services_offered: createDoctorDto.services_offered || [],
         working_hours: createDoctorDto.working_hours || {},
       });
@@ -58,6 +62,12 @@ export class DoctorsService {
     });
   }
 
+  async findAllServices(): Promise<Service[]> {
+    return this.serviceRepository.find({
+      order: { name: 'ASC' },
+    });
+  }
+
   async findOne(id: number): Promise<Doctor> {
     const doctor = await this.doctorRepository.findOne({
       where: { id },
@@ -86,6 +96,9 @@ export class DoctorsService {
     }
     if (updateDoctorDto.working_hours !== undefined) {
       doctor.working_hours = updateDoctorDto.working_hours;
+    }
+    if (updateDoctorDto.status !== undefined) {
+      doctor.status = updateDoctorDto.status;
     }
 
     try {

@@ -8,6 +8,11 @@ import {
 } from 'typeorm';
 import { DoctorLeave } from './doctor-leave.entity';
 
+export enum DoctorStatus {
+  ACTIVE = 'active',
+  INACTIVE = 'inactive',
+}
+
 @Entity('Doctors')
 export class Doctor {
   @PrimaryGeneratedColumn()
@@ -18,6 +23,13 @@ export class Doctor {
 
   @Column({ type: 'varchar', length: 255 })
   specialization: string;
+
+  @Column({
+    type: 'enum',
+    enum: DoctorStatus,
+    default: DoctorStatus.ACTIVE,
+  })
+  status: DoctorStatus;
 
   @Column({ type: 'jsonb', name: 'services_offered', nullable: true })
   services_offered: string[];

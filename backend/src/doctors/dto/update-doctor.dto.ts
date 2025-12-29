@@ -6,9 +6,11 @@ import {
   MaxLength,
   IsOptional,
   ValidateNested,
+  IsEnum,
 } from 'class-validator';
 import { Type } from 'class-transformer';
 import { CreateDoctorLeaveDto } from './create-doctor-leave.dto';
+import { DoctorStatus } from '../entities/doctor.entity';
 
 export class UpdateDoctorDto {
   @IsString()
@@ -37,4 +39,8 @@ export class UpdateDoctorDto {
   @Type(() => CreateDoctorLeaveDto)
   @IsOptional()
   leave_dates?: CreateDoctorLeaveDto[];
+
+  @IsEnum(DoctorStatus)
+  @IsOptional()
+  status?: DoctorStatus;
 }
