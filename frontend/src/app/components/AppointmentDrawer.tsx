@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { X, Phone, Calendar, Clock, User, Stethoscope, ClipboardList, CheckCircle2, UserCheck, Ban, Edit } from 'lucide-react';
+import { X, Phone, Calendar, Clock, User, Stethoscope, ClipboardList, CheckCircle2, UserCheck, Ban, Edit, UserX } from 'lucide-react';
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from './ui/sheet';
 import { Button } from './ui/button';
 import { StatusBadge } from './StatusBadge';
@@ -16,6 +16,7 @@ interface AppointmentDrawerProps {
   onComplete?: (id: string) => void;
   onReschedule?: (id: string) => void;
   onCancel?: (id: string) => void;
+  onNoShow?: (id: string) => void;
 }
 
 export function AppointmentDrawer({ 
@@ -26,7 +27,8 @@ export function AppointmentDrawer({
   onCheckIn,
   onComplete,
   onReschedule,
-  onCancel
+  onCancel,
+  onNoShow
 }: AppointmentDrawerProps) {
   const [isProcessing, setIsProcessing] = useState(false);
 
@@ -47,8 +49,9 @@ export function AppointmentDrawer({
   const canConfirm = appointment.status === 'booked';
   const canCheckIn = appointment.status === 'confirmed' || appointment.status === 'booked';
   const canComplete = appointment.status === 'checked-in' || appointment.status === 'confirmed';
-  const canReschedule = appointment.status !== 'completed' && appointment.status !== 'cancelled';
-  const canCancel = appointment.status !== 'completed' && appointment.status !== 'cancelled';
+  const canReschedule = appointment.status !== 'completed' && appointment.status !== 'cancelled' && appointment.status !== 'no-show';
+  const canCancel = appointment.status !== 'completed' && appointment.status !== 'cancelled' && appointment.status !== 'no-show';
+  const canNoShow = appointment.status !== 'completed' && appointment.status !== 'cancelled' && appointment.status !== 'no-show';
 
   return (
     <Sheet open={open} onOpenChange={(open) => !open && onClose()}>
@@ -198,7 +201,7 @@ export function AppointmentDrawer({
             
             {canConfirm && onConfirm && (
               <Button 
-                className="w-full bg-green-600 hover:bg-green-700"
+                className="w-full bg-[rgb(203,255,143)] hover:bg-[#AEEF5A]"
                 onClick={() => handleAction(
                   () => onConfirm(appointment.id),
                   'Appointment confirmed successfully'
@@ -212,7 +215,7 @@ export function AppointmentDrawer({
 
             {canCheckIn && onCheckIn && (
               <Button 
-                className="w-full bg-purple-600 hover:bg-purple-700"
+                className="w-full bg-[rgb(151,196,255)] hover:bg-[#7FB2FF]"
                 onClick={() => handleAction(
                   () => onCheckIn(appointment.id),
                   'Patient checked in successfully'
@@ -226,7 +229,7 @@ export function AppointmentDrawer({
 
             {canComplete && onComplete && (
               <Button 
-                className="w-full bg-blue-600 hover:bg-blue-700"
+                className="w-full"
                 onClick={() => handleAction(
                   () => onComplete(appointment.id),
                   'Appointment marked as completed'
@@ -265,6 +268,21 @@ export function AppointmentDrawer({
               >
                 <Ban className="h-4 w-4 mr-2" />
                 Cancel Appointment
+              </Button>
+            )}
+
+            {canNoShow && onNoShow && (
+              <Button 
+                variant="outline" 
+                className="w-full text-red-600 hover:text-red-700 hover:bg-red-50"
+                onClick={() => handleAction(
+                  () => onNoShow(appointment.id),
+                  'Appointment marked as no-show'
+                )}
+                disabled={isProcessing}
+              >
+                <UserX className="h-4 w-4 mr-2" />
+                Mark as No-show
               </Button>
             )}
           </div>

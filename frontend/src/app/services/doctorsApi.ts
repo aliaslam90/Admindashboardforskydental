@@ -72,7 +72,7 @@ class DoctorsApi {
       name: string;
       duration_minutes: number;
       active_status: boolean;
-    }[]>('/doctors/services');
+    }[]>('/services');
 
     return backendServices.map((svc) => ({
       id: svc.id.toString(),
@@ -109,6 +109,57 @@ class DoctorsApi {
 
   async delete(id: string): Promise<void> {
     await apiClient.delete(`/doctors/${id}`);
+  }
+
+  async createService(payload: {
+    category: string;
+    name: string;
+    duration_minutes: number;
+    active_status: boolean;
+  }): Promise<Service> {
+    const svc = await apiClient.post<{
+      id: number;
+      category: string;
+      name: string;
+      duration_minutes: number;
+      active_status: boolean;
+    }>('/services', payload);
+    return {
+      id: svc.id.toString(),
+      category: svc.category,
+      name: svc.name,
+      duration: svc.duration_minutes,
+      active: svc.active_status,
+    };
+  }
+
+  async updateService(
+    id: string,
+    payload: Partial<{
+      category: string;
+      name: string;
+      duration_minutes: number;
+      active_status: boolean;
+    }>,
+  ): Promise<Service> {
+    const svc = await apiClient.patch<{
+      id: number;
+      category: string;
+      name: string;
+      duration_minutes: number;
+      active_status: boolean;
+    }>(`/services/${id}`, payload);
+    return {
+      id: svc.id.toString(),
+      category: svc.category,
+      name: svc.name,
+      duration: svc.duration_minutes,
+      active: svc.active_status,
+    };
+  }
+
+  async deleteService(id: string): Promise<void> {
+    await apiClient.delete(`/services/${id}`);
   }
 }
 

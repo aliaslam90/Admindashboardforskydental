@@ -3,7 +3,6 @@ import {
   LayoutDashboard, 
   Calendar, 
   Users, 
-  UserCog, 
   Briefcase, 
   Bell, 
   Settings, 
@@ -13,10 +12,12 @@ import {
   ChevronDown,
   Stethoscope
 } from 'lucide-react';
+import image_6ed9d1dbe20e8b3479eed332bf1c51ffbc9e9f7c from '../../assets/6ed9d1dbe20e8b3479eed332bf1c51ffbc9e9f7c.png';
 import { cn } from './ui/utils';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from './ui/dropdown-menu';
 import { NotificationCenter } from './NotificationCenter';
 import { Admin } from '../data/mockData';
+import { ImageWithFallback } from './figma/ImageWithFallback';
 
 interface DashboardLayoutProps {
   children: ReactNode;
@@ -59,13 +60,12 @@ export function DashboardLayout({ children, currentPage, onNavigate, currentAdmi
           {/* Logo */}
           <div className="h-16 flex items-center justify-between px-6 border-b border-gray-200">
             <div className="flex items-center gap-3">
-              <div className="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center">
-                <Stethoscope className="h-5 w-5 text-white" />
-              </div>
-              <div>
-                <h1 className="font-semibold text-gray-900">Sky Dental</h1>
-                <p className="text-xs text-gray-500">Abu Dhabi</p>
-              </div>
+              <ImageWithFallback 
+                src={image_6ed9d1dbe20e8b3479eed332bf1c51ffbc9e9f7c}
+                alt="Sky Dental Center" 
+                className="h-10 w-auto"
+                fallbackIcon={<LayoutDashboard className="h-10 w-10 text-primary" />}
+              />
             </div>
             <button 
               onClick={() => setSidebarOpen(false)}
@@ -90,11 +90,11 @@ export function DashboardLayout({ children, currentPage, onNavigate, currentAdmi
                     className={cn(
                       "w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors",
                       isActive
-                        ? "bg-blue-50 text-blue-700"
+                        ? "bg-[rgba(203,255,143,0.3)] text-[#0C0060]"
                         : "text-gray-700 hover:bg-gray-100 hover:text-gray-900"
                     )}
                   >
-                    <item.icon className={cn("h-5 w-5", isActive ? "text-blue-700" : "text-gray-500")} />
+                    <item.icon className={cn("h-5 w-5", isActive ? "text-[#0C0060]" : "text-gray-500")} />
                     {item.name}
                   </button>
                 );

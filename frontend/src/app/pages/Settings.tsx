@@ -11,7 +11,7 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, Di
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '../components/ui/alert-dialog';
 import { Badge } from '../components/ui/badge';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../components/ui/table';
-import { mockAdmins, Admin, AdminRole } from '../data/mockData';
+import { Admin, AdminRole } from '../data/mockData';
 import { toast } from 'sonner';
 
 interface SettingsProps {
@@ -19,7 +19,28 @@ interface SettingsProps {
   onLogout: () => void;
 }
 
-export function Settings({ currentAdmin = mockAdmins[0], onLogout }: SettingsProps) {
+export function Settings({ currentAdmin, onLogout }: SettingsProps) {
+  const fallbackAdmin: Admin = currentAdmin ?? {
+    id: 'admin-local',
+    name: 'Admin',
+    email: 'admin@example.com',
+    phone: '',
+    role: 'super-admin',
+    status: 'active',
+    permissions: {
+      dashboard: true,
+      appointments: true,
+      calendar: true,
+      patients: true,
+      doctors: true,
+      services: true,
+      notifications: true,
+      settings: true,
+      adminManagement: true
+    },
+    lastLogin: new Date().toISOString(),
+    createdAt: new Date().toISOString()
+  };
   const [bufferTime, setBufferTime] = useState('15');
   const [cancellationWindow, setCancellationWindow] = useState('24');
   const [calendarConnected, setCalendarConnected] = useState(true);
@@ -29,7 +50,7 @@ export function Settings({ currentAdmin = mockAdmins[0], onLogout }: SettingsPro
   const [editAdminOpen, setEditAdminOpen] = useState(false);
   const [deleteAdminOpen, setDeleteAdminOpen] = useState(false);
   const [selectedAdmin, setSelectedAdmin] = useState<Admin | null>(null);
-  const [admins, setAdmins] = useState<Admin[]>(mockAdmins);
+  const [admins, setAdmins] = useState<Admin[]>([fallbackAdmin]);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   // Admin Form State
@@ -211,7 +232,7 @@ export function Settings({ currentAdmin = mockAdmins[0], onLogout }: SettingsPro
                   <CardDescription>Manage administrator accounts and roles</CardDescription>
                 </div>
               </div>
-              <Button onClick={handleAddAdmin} className="bg-blue-600 hover:bg-blue-700">
+              <Button onClick={handleAddAdmin} className="bg-[rgb(203,255,143)] hover:bg-[#AEEF5A]">
                 <Plus className="h-4 w-4 mr-2" />
                 Add Admin
               </Button>
@@ -333,7 +354,7 @@ export function Settings({ currentAdmin = mockAdmins[0], onLogout }: SettingsPro
             ))}
           </div>
 
-          <Button className="bg-blue-600 hover:bg-blue-700">
+          <Button className="bg-[rgb(203,255,143)] hover:bg-[#AEEF5A]">
             Save Working Hours
           </Button>
         </CardContent>
@@ -558,7 +579,7 @@ export function Settings({ currentAdmin = mockAdmins[0], onLogout }: SettingsPro
             <Button variant="outline" onClick={() => setConfirmDialog(null)}>
               Cancel
             </Button>
-            <Button onClick={handleConfirm} className="bg-blue-600 hover:bg-blue-700">
+            <Button onClick={handleConfirm} className="bg-[rgb(203,255,143)] hover:bg-[#AEEF5A]">
               Confirm
             </Button>
           </DialogFooter>
@@ -647,7 +668,7 @@ export function Settings({ currentAdmin = mockAdmins[0], onLogout }: SettingsPro
               <Button variant="outline" onClick={() => setAddAdminOpen(false)}>
                 Cancel
               </Button>
-              <Button type="submit" className="bg-blue-600 hover:bg-blue-700" disabled={isSubmitting}>
+              <Button type="submit" className="bg-[rgb(203,255,143)] hover:bg-[#AEEF5A]" disabled={isSubmitting}>
                 Add Admin
               </Button>
             </DialogFooter>
@@ -717,7 +738,7 @@ export function Settings({ currentAdmin = mockAdmins[0], onLogout }: SettingsPro
               <Button variant="outline" onClick={() => setEditAdminOpen(false)}>
                 Cancel
               </Button>
-              <Button type="submit" className="bg-blue-600 hover:bg-blue-700" disabled={isSubmitting}>
+              <Button type="submit" className="bg-[rgb(203,255,143)] hover:bg-[#AEEF5A]" disabled={isSubmitting}>
                 Update Admin
               </Button>
             </DialogFooter>

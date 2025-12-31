@@ -1,9 +1,11 @@
-import { useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 import { Button } from '../../components/ui/button';
 import { Card, CardContent } from '../../components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../../components/ui/select';
-import { mockAppointments, AppointmentStatus, Doctor } from '../../data/mockData';
+import { Appointment, AppointmentStatus, Doctor } from '../../data/mockData';
+import { appointmentsApi } from '../../services/appointmentsApi';
+import { toast } from 'sonner';
 
 interface DoctorCalendarViewProps {
   currentDoctor: Doctor;
@@ -12,6 +14,7 @@ interface DoctorCalendarViewProps {
 export function DoctorCalendarView({ currentDoctor }: DoctorCalendarViewProps) {
   const [currentDate, setCurrentDate] = useState(new Date());
   const [view, setView] = useState<'day' | 'week'>('week');
+  const [appointments, setAppointments] = useState<Appointment[]>([]);
 
   const timeSlots = Array.from({ length: 10 }, (_, i) => {
     const hour = i + 9; // 9 AM to 6 PM
@@ -32,13 +35,32 @@ export function DoctorCalendarView({ currentDoctor }: DoctorCalendarViewProps) {
 
   const weekDays = view === 'week' ? getWeekDays(currentDate) : [currentDate];
 
+  useEffect(() => {
+    fetchAppointments();
+  }, [currentDoctor.id]);
+
+  const fetchAppointments = async () => {
+    try {
+      const data = await appointmentsApi.getAll({ doctorId: currentDoctor.id });
+      setAppointments(data);
+    } catch (error) {
+      console.error('Failed to load appointments for calendar', error);
+      toast.error('Failed to load appointments');
+    }
+  };
+
+  const appointmentsForDay = useMemo(
+    () =>
+      appointments.filter(apt => apt.doctorId === currentDoctor.id),
+    [appointments, currentDoctor.id],
+  );
+
   const getAppointmentsForSlot = (date: Date, time: string) => {
     const dateStr = date.toISOString().split('T')[0];
-    return mockAppointments.filter(apt => {
+    return appointmentsForDay.filter(apt => {
       if (apt.date !== dateStr) return false;
       if (apt.doctorId !== currentDoctor.id) return false;
-      
-      // Check if appointment time matches the slot (simple time matching)
+      // Check if appointment time matches the slot (hour match)
       return apt.time.startsWith(time.split(':')[0]);
     });
   };

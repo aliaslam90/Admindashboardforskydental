@@ -68,7 +68,7 @@ export function CalendarView({ onCreateAppointment }: CalendarViewProps) {
           <h1 className="text-2xl font-semibold text-gray-900">Calendar View</h1>
           <p className="text-sm text-gray-500 mt-1">Visual scheduling and conflict prevention</p>
         </div>
-        <Button onClick={onCreateAppointment} className="bg-blue-600 hover:bg-blue-700">
+        <Button onClick={onCreateAppointment} className="bg-[rgb(203,255,143)] hover:bg-[#AEEF5A]">
           <Plus className="h-4 w-4 mr-2" />
           New Appointment
         </Button>

@@ -1,9 +1,11 @@
+import image_6ed9d1dbe20e8b3479eed332bf1c51ffbc9e9f7c from '../../assets/6ed9d1dbe20e8b3479eed332bf1c51ffbc9e9f7c.png';
 import { useState } from 'react';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
 import { Label } from '../components/ui/label';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../components/ui/card';
 import { AlertCircle } from 'lucide-react';
+import { ImageWithFallback } from '../components/figma/ImageWithFallback';
 
 interface LoginProps {
   onLogin: (email: string, password: string) => void;
@@ -48,26 +50,16 @@ export function Login({ onLogin, onForgotPassword, onSwitchToDoctor }: LoginProp
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 via-white to-blue-50 p-4">
+    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 via-white to-blue-50 p-4 bg-[rgba(203,255,143,0.3)]">
       <Card className="w-full max-w-md">
         <CardHeader className="space-y-3 text-center">
-          <div className="mx-auto w-16 h-16 bg-blue-600 rounded-2xl flex items-center justify-center">
-            <svg
-              xmlns="http://www.w3.org/2000/svg"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              className="w-8 h-8 text-white"
-            >
-              <path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z" />
-              <line x1="7" y1="7" x2="7.01" y2="7" />
-            </svg>
-          </div>
+          <ImageWithFallback 
+            src={image_6ed9d1dbe20e8b3479eed332bf1c51ffbc9e9f7c} 
+            alt="Sky Dental Center" 
+            className="mx-auto w-48 h-auto"
+            fallbackIcon={<div className="mx-auto w-48 h-48 bg-gray-100 rounded-lg flex items-center justify-center text-gray-400">Logo</div>}
+          />
           <div>
-            <CardTitle className="text-2xl">Sky Dental Clinic</CardTitle>
             <CardDescription className="mt-2">
               Admin Dashboard Login
             </CardDescription>
@@ -100,7 +92,7 @@ export function Login({ onLogin, onForgotPassword, onSwitchToDoctor }: LoginProp
                 <button
                   type="button"
                   onClick={onForgotPassword}
-                  className="text-sm text-blue-600 hover:text-blue-700 hover:underline"
+                  className="text-sm text-[rgb(0,0,0)] hover:text-blue-700 hover:underline"
                 >
                   Forgot password?
                 </button>
@@ -117,7 +109,7 @@ export function Login({ onLogin, onForgotPassword, onSwitchToDoctor }: LoginProp
 
             <Button
               type="submit"
-              className="w-full bg-blue-600 hover:bg-blue-700"
+              className="w-full bg-[rgb(203,255,143)] hover:bg-[#AEEF5A]"
               disabled={isLoading}
             >
               {isLoading ? 'Signing in...' : 'Sign In'}
@@ -128,17 +120,17 @@ export function Login({ onLogin, onForgotPassword, onSwitchToDoctor }: LoginProp
             {onSwitchToDoctor && (
               <button
                 onClick={onSwitchToDoctor}
-                className="text-sm text-blue-600 hover:text-blue-700 hover:underline w-full text-center mb-4"
+                className="text-sm text-[rgb(0,0,0)] hover:text-blue-700 hover:underline w-full text-center mb-4"
               >
                 Are you a doctor? Login here
               </button>
             )}
             
             <div className="bg-blue-50 rounded-lg p-4 space-y-2">
-              <p className="text-xs font-medium text-blue-900">Demo Credentials:</p>
+              <p className="text-xs font-medium text-[rgb(0,0,0)]">Demo Credentials:</p>
               <div className="text-xs text-blue-800 space-y-1">
-                <p>📧 <strong>Super Admin:</strong> admin@skydentalclinic.com / admin123</p>
-                <p>📧 <strong>Manager:</strong> manager@skydentalclinic.com / manager123</p>
+                <p className="text-[rgb(0,0,0)]">📧 <strong>Super Admin:</strong> admin@skydentalclinic.com / admin123</p>
+                <p className="text-[rgb(0,0,0)]">📧 <strong>Manager:</strong> manager@skydentalclinic.com / manager123</p>
               </div>
             </div>
           </div>

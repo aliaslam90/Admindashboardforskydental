@@ -39,7 +39,7 @@ export function Dashboard({ onNavigate, onCreateAppointment }: DashboardProps) {
           <h1 className="text-2xl font-semibold text-gray-900">Dashboard</h1>
           <p className="text-sm text-gray-500 mt-1">Welcome back! Here's today's overview</p>
         </div>
-        <Button onClick={onCreateAppointment} className="bg-blue-600 hover:bg-blue-700">
+        <Button onClick={onCreateAppointment}>
           <Plus className="h-4 w-4 mr-2" />
           Create Appointment
         </Button>

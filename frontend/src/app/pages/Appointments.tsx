@@ -1,15 +1,18 @@
-import React, { useState, useMemo, useEffect } from 'react';
-import { Plus, Search, Filter, MoreVertical, Calendar as CalendarIcon, Edit, Ban, CheckCircle2 } from 'lucide-react';
+import { useState, useMemo, useEffect } from 'react';
+import { Plus, Search, Filter, MoreVertical, Calendar as CalendarIcon, Edit, Ban, CheckCircle2, Clock } from 'lucide-react';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
+import { Label } from '../components/ui/label';
 import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../components/ui/table';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../components/ui/select';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from '../components/ui/dropdown-menu';
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '../components/ui/dialog';
 import { StatusBadge } from '../components/StatusBadge';
 import { AppointmentDrawer } from '../components/AppointmentDrawer';
-import { mockDoctors, mockServices, Appointment, AppointmentStatus } from '../data/mockData';
+import { Appointment, AppointmentStatus, Doctor, Service } from '../data/mockData';
 import { appointmentsApi } from '../services/appointmentsApi';
+import { doctorsApi } from '../services/doctorsApi';
 import { toast } from 'sonner';
 
 interface AppointmentsProps {
@@ -19,9 +22,27 @@ interface AppointmentsProps {
 
 export function Appointments({ onCreateAppointment, selectedAppointmentId }: AppointmentsProps) {
   const [appointments, setAppointments] = useState<Appointment[]>([]);
+  const [doctorOptions, setDoctorOptions] = useState<Doctor[]>([]);
+  const [serviceOptions, setServiceOptions] = useState<Service[]>([]);
   const [selectedAppointment, setSelectedAppointment] = useState<Appointment | null>(null);
   const [drawerOpen, setDrawerOpen] = useState(false);
-  const [loading, setLoading] = useState(true);
+  const [rescheduleOpen, setRescheduleOpen] = useState(false);
+  const [rescheduleAppointmentId, setRescheduleAppointmentId] = useState<string | null>(null);
+  const [rescheduleForm, setRescheduleForm] = useState({
+    date: '',
+    time: ''
+  });
+  const [isLoading, setIsLoading] = useState(false);
+  const openNativePicker = (e: React.FocusEvent<HTMLInputElement> | React.MouseEvent<HTMLInputElement>) => {
+    // Improves UX on browsers that support showPicker (e.g., Chrome)
+    const input = e.currentTarget;
+    if (typeof input.showPicker === 'function') {
+      input.showPicker();
+    }
+  };
+
+  const toDateValue = (value: string) => (value ? new Date(value).getTime() : null);
+
   
   // Filters
   const [searchQuery, setSearchQuery] = useState('');
@@ -31,14 +52,44 @@ export function Appointments({ onCreateAppointment, selectedAppointmentId }: App
   const [dateFrom, setDateFrom] = useState('');
   const [dateTo, setDateTo] = useState('');
 
-  // Fetch appointments on mount and when filters change
+  // Load appointments from backend
   useEffect(() => {
+    const fetchAppointments = async () => {
+      setIsLoading(true);
+      try {
+        const data = await appointmentsApi.getAll();
+        setAppointments(data);
+      } catch (error) {
+        console.error('Failed to load appointments', error);
+        toast.error('Failed to load appointments');
+      } finally {
+        setIsLoading(false);
+      }
+    };
     fetchAppointments();
+  }, []);
+
+  // Load doctors and services for filters
+  useEffect(() => {
+    const fetchFilterOptions = async () => {
+      try {
+        const [doctors, services] = await Promise.all([
+          doctorsApi.getAll(),
+          doctorsApi.getServices(),
+        ]);
+        setDoctorOptions(doctors);
+        setServiceOptions(services);
+      } catch (error) {
+        console.error('Failed to load doctors/services', error);
+        toast.error('Failed to load doctors/services');
+      }
+    };
+    fetchFilterOptions();
   }, []);
 
   // Open drawer for selected appointment
   useEffect(() => {
-    if (selectedAppointmentId && appointments.length > 0) {
+    if (selectedAppointmentId) {
       const apt = appointments.find(a => a.id === selectedAppointmentId);
       if (apt) {
         setSelectedAppointment(apt);
@@ -46,19 +97,6 @@ export function Appointments({ onCreateAppointment, selectedAppointmentId }: App
       }
     }
   }, [selectedAppointmentId, appointments]);
-
-  const fetchAppointments = async () => {
-    try {
-      setLoading(true);
-      const data = await appointmentsApi.getAll();
-      setAppointments(data);
-    } catch (error) {
-      console.error('Failed to fetch appointments:', error);
-      toast.error('Failed to load appointments');
-    } finally {
-      setLoading(false);
-    }
-  };
 
   // Filtered appointments
   const filteredAppointments = useMemo(() => {
@@ -91,10 +129,14 @@ export function Appointments({ onCreateAppointment, selectedAppointmentId }: App
       }
 
       // Date range filter
-      if (dateFrom && apt.date < dateFrom) {
+      const aptDateValue = toDateValue(apt.date);
+      const fromValue = toDateValue(dateFrom);
+      const toValue = toDateValue(dateTo);
+
+      if (fromValue !== null && aptDateValue !== null && aptDateValue < fromValue) {
         return false;
       }
-      if (dateTo && apt.date > dateTo) {
+      if (toValue !== null && aptDateValue !== null && aptDateValue > toValue) {
         return false;
       }
 
@@ -116,66 +158,67 @@ export function Appointments({ onCreateAppointment, selectedAppointmentId }: App
     setDrawerOpen(true);
   };
 
-  const updateAppointmentStatus = async (id: string, status: AppointmentStatus) => {
-    try {
-      const updatedAppointment = await appointmentsApi.updateStatus(id, status);
-      setAppointments(prev => 
-        prev.map(apt => 
-          apt.id === id ? updatedAppointment : apt
-        )
-      );
-      // Update selected appointment if it's the one being updated
-      if (selectedAppointment?.id === id) {
-        setSelectedAppointment(updatedAppointment);
-      }
-    } catch (error) {
-      console.error('Failed to update appointment status:', error);
-      toast.error('Failed to update appointment status');
-      throw error;
-    }
+  const updateAppointmentStatus = (id: string, status: AppointmentStatus) => {
+    setAppointments(prev => 
+      prev.map(apt => 
+        apt.id === id 
+          ? { ...apt, status, updatedAt: new Date().toISOString() }
+          : apt
+      )
+    );
   };
 
-  const handleConfirm = async (id: string) => {
-    try {
-      await updateAppointmentStatus(id, 'confirmed');
-      toast.success('Appointment confirmed');
-    } catch (error) {
-      // Error already handled in updateAppointmentStatus
-    }
+  const handleConfirm = (id: string) => {
+    updateAppointmentStatus(id, 'confirmed');
   };
 
-  const handleCheckIn = async (id: string) => {
-    try {
-      await updateAppointmentStatus(id, 'checked-in');
-      toast.success('Patient checked in');
-    } catch (error) {
-      // Error already handled
-    }
+  const handleCheckIn = (id: string) => {
+    updateAppointmentStatus(id, 'checked-in');
   };
 
-  const handleComplete = async (id: string) => {
-    try {
-      await updateAppointmentStatus(id, 'completed');
-      toast.success('Appointment completed');
-    } catch (error) {
-      // Error already handled
-    }
+  const handleComplete = (id: string) => {
+    updateAppointmentStatus(id, 'completed');
   };
 
   const handleReschedule = (id: string) => {
-    // This would open a reschedule modal
-    toast.info('Reschedule modal would open here');
+    setRescheduleAppointmentId(id);
+    setRescheduleOpen(true);
+  };
+
+  const handleSaveReschedule = () => {
+    if (!rescheduleForm.date || !rescheduleForm.time) {
+      toast.error('Please select both date and time');
+      return;
+    }
+
+    setAppointments(prev => 
+      prev.map(apt => 
+        apt.id === rescheduleAppointmentId 
+          ? { ...apt, date: rescheduleForm.date, time: rescheduleForm.time, updatedAt: new Date().toISOString() }
+          : apt
+      )
+    );
+
+    toast.success('Appointment rescheduled successfully');
+    setRescheduleOpen(false);
+    setRescheduleAppointmentId(null);
+    setRescheduleForm({ date: '', time: '' });
+  };
+
+  const handleNoShow = (id: string) => {
+    updateAppointmentStatus(id, 'no-show');
   };
 
   const handleCancel = (id: string) => {
-    // This would open a cancel modal
-    toast.info('Cancel confirmation modal would open here');
+    // Placeholder until cancel modal is implemented
+    toast.info(`Cancel confirmation modal would open here for ${id}`);
   };
 
-  const handleQuickAction = async (appointment: Appointment, action: string) => {
+  const handleQuickAction = (appointment: Appointment, action: string) => {
     switch (action) {
       case 'confirm':
-        await handleConfirm(appointment.id);
+        updateAppointmentStatus(appointment.id, 'confirmed');
+        toast.success('Appointment confirmed');
         break;
       case 'reschedule':
         handleReschedule(appointment.id);
@@ -194,7 +237,7 @@ export function Appointments({ onCreateAppointment, selectedAppointmentId }: App
           <h1 className="text-2xl font-semibold text-gray-900">Appointments</h1>
           <p className="text-sm text-gray-500 mt-1">Manage and track all appointments</p>
         </div>
-        <Button onClick={onCreateAppointment} className="bg-blue-600 hover:bg-blue-700">
+        <Button onClick={onCreateAppointment}>
           <Plus className="h-4 w-4 mr-2" />
           New Appointment
         </Button>
@@ -229,6 +272,8 @@ export function Appointments({ onCreateAppointment, selectedAppointmentId }: App
                 type="date"
                 value={dateFrom}
                 onChange={(e) => setDateFrom(e.target.value)}
+                onClick={openNativePicker}
+                onFocus={openNativePicker}
                 placeholder="From date"
               />
             </div>
@@ -239,6 +284,8 @@ export function Appointments({ onCreateAppointment, selectedAppointmentId }: App
                 type="date"
                 value={dateTo}
                 onChange={(e) => setDateTo(e.target.value)}
+                onClick={openNativePicker}
+                onFocus={openNativePicker}
                 placeholder="To date"
               />
             </div>
@@ -269,7 +316,7 @@ export function Appointments({ onCreateAppointment, selectedAppointmentId }: App
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">All Doctors</SelectItem>
-                  {mockDoctors.map(doctor => (
+                  {doctorOptions.map(doctor => (
                     <SelectItem key={doctor.id} value={doctor.id}>
                       {doctor.name}
                     </SelectItem>
@@ -286,7 +333,7 @@ export function Appointments({ onCreateAppointment, selectedAppointmentId }: App
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">All Services</SelectItem>
-                  {mockServices.map(service => (
+                  {serviceOptions.map(service => (
                     <SelectItem key={service.id} value={service.id}>
                       {service.name}
                     </SelectItem>
@@ -327,10 +374,9 @@ export function Appointments({ onCreateAppointment, selectedAppointmentId }: App
           </div>
         </CardHeader>
         <CardContent>
-          {loading ? (
-            <div className="text-center py-12">
-              <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
-              <p className="text-sm text-gray-500">Loading appointments...</p>
+          {isLoading ? (
+            <div className="py-12 text-center text-sm text-gray-500">
+              Loading appointments...
             </div>
           ) : sortedAppointments.length === 0 ? (
             <div className="text-center py-12">
@@ -455,7 +501,63 @@ export function Appointments({ onCreateAppointment, selectedAppointmentId }: App
         onComplete={handleComplete}
         onReschedule={handleReschedule}
         onCancel={handleCancel}
+        onNoShow={handleNoShow}
       />
+
+      {/* Reschedule Dialog */}
+      <Dialog open={rescheduleOpen} onOpenChange={setRescheduleOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Reschedule Appointment</DialogTitle>
+            <DialogDescription>
+              Select a new date and time for the appointment.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="grid gap-4 py-4">
+            <div className="space-y-2">
+              <Label htmlFor="date">Date *</Label>
+              <div className="relative">
+                <Input
+                  id="date"
+                  type="date"
+                  value={rescheduleForm.date}
+                  onChange={(e) => setRescheduleForm({ ...rescheduleForm, date: e.target.value })}
+                  className="pr-10"
+                />
+                <CalendarIcon className="absolute right-3 top-1/2 -translate-y-1/2 h-5 w-5 text-blue-600 pointer-events-none" />
+              </div>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="time">Time *</Label>
+              <div className="relative">
+                <Input
+                  id="time"
+                  type="time"
+                  value={rescheduleForm.time}
+                  onChange={(e) => setRescheduleForm({ ...rescheduleForm, time: e.target.value })}
+                  className="pr-10"
+                />
+                <Clock className="absolute right-3 top-1/2 -translate-y-1/2 h-5 w-5 text-blue-600 pointer-events-none" />
+              </div>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setRescheduleOpen(false)}
+            >
+              Cancel
+            </Button>
+            <Button
+              type="button"
+              onClick={handleSaveReschedule}
+            >
+              Reschedule
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

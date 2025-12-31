@@ -67,108 +67,39 @@ export class SeedService implements OnModuleInit {
   }
 
   private async seedServices() {
-    const existingServices = await this.serviceRepository.count();
-    
-    if (existingServices > 0) {
-      this.logger.log(`Services already exist (${existingServices} records). Skipping seed.`);
-      return;
-    }
-
     this.logger.log('Seeding Services...');
 
     const defaultServices: Partial<Service>[] = [
-      {
-        category: 'Preventive Care',
-        name: 'Regular Checkup',
-        duration_minutes: 30,
-        active_status: true,
-      },
-      {
-        category: 'Preventive Care',
-        name: 'Teeth Cleaning',
-        duration_minutes: 45,
-        active_status: true,
-      },
-      {
-        category: 'Preventive Care',
-        name: 'Fluoride Treatment',
-        duration_minutes: 15,
-        active_status: true,
-      },
-      {
-        category: 'Restorative',
-        name: 'Tooth Filling',
-        duration_minutes: 60,
-        active_status: true,
-      },
-      {
-        category: 'Restorative',
-        name: 'Root Canal Treatment',
-        duration_minutes: 90,
-        active_status: true,
-      },
-      {
-        category: 'Restorative',
-        name: 'Crown Placement',
-        duration_minutes: 120,
-        active_status: true,
-      },
-      {
-        category: 'Cosmetic',
-        name: 'Teeth Whitening',
-        duration_minutes: 60,
-        active_status: true,
-      },
-      {
-        category: 'Cosmetic',
-        name: 'Veneers Consultation',
-        duration_minutes: 45,
-        active_status: true,
-      },
-      {
-        category: 'Orthodontics',
-        name: 'Braces Consultation',
-        duration_minutes: 60,
-        active_status: true,
-      },
-      {
-        category: 'Orthodontics',
-        name: 'Braces Adjustment',
-        duration_minutes: 30,
-        active_status: true,
-      },
-      {
-        category: 'Oral Surgery',
-        name: 'Tooth Extraction',
-        duration_minutes: 45,
-        active_status: true,
-      },
-      {
-        category: 'Oral Surgery',
-        name: 'Wisdom Tooth Removal',
-        duration_minutes: 90,
-        active_status: true,
-      },
+      { category: 'Preventive Care', name: 'Regular Checkup', duration_minutes: 30, active_status: true },
+      { category: 'Preventive Care', name: 'Teeth Cleaning', duration_minutes: 45, active_status: true },
+      { category: 'Preventive Care', name: 'Fluoride Treatment', duration_minutes: 15, active_status: true },
+      { category: 'Restorative', name: 'Tooth Filling', duration_minutes: 60, active_status: true },
+      { category: 'Restorative', name: 'Root Canal Treatment', duration_minutes: 90, active_status: true },
+      { category: 'Restorative', name: 'Crown Placement', duration_minutes: 120, active_status: true },
+      { category: 'Cosmetic', name: 'Teeth Whitening', duration_minutes: 60, active_status: true },
+      { category: 'Cosmetic', name: 'Veneers Consultation', duration_minutes: 45, active_status: true },
+      { category: 'Orthodontics', name: 'Braces Consultation', duration_minutes: 60, active_status: true },
+      { category: 'Orthodontics', name: 'Braces Adjustment', duration_minutes: 30, active_status: true },
+      { category: 'Oral Surgery', name: 'Tooth Extraction', duration_minutes: 45, active_status: true },
+      { category: 'Oral Surgery', name: 'Wisdom Tooth Removal', duration_minutes: 90, active_status: true },
     ];
 
-    try {
-      const services = this.serviceRepository.create(defaultServices);
-      await this.serviceRepository.save(services);
-      this.logger.log(`Successfully seeded ${services.length} services`);
-    } catch (error) {
-      this.logger.error(`Error seeding services: ${error.message}`, error.stack);
-      throw error;
+    let created = 0;
+    for (const svc of defaultServices) {
+      const existing = await this.serviceRepository.findOne({ where: { name: svc.name } });
+      if (existing) {
+        const updated = Object.assign(existing, svc);
+        await this.serviceRepository.save(updated);
+      } else {
+        const newSvc = this.serviceRepository.create(svc);
+        await this.serviceRepository.save(newSvc);
+        created += 1;
+      }
     }
+    this.logger.log(`Services seed complete. Added ${created} new services.`);
   }
 
   private async seedDoctors() {
-    const existingDoctors = await this.doctorRepository.count();
-
-    if (existingDoctors > 0) {
-      this.logger.log(`Doctors already exist (${existingDoctors} records). Skipping seed.`);
-      return;
-    }
-
     this.logger.log('Seeding Doctors...');
 
     // Fetch services to reference IDs
@@ -256,14 +187,23 @@ export class SeedService implements OnModuleInit {
       },
     ];
 
-    try {
-      const doctors = this.doctorRepository.create(defaultDoctors);
-      const savedDoctors = await this.doctorRepository.save(doctors);
-      this.logger.log(`Successfully seeded ${savedDoctors.length} doctors`);
-    } catch (error) {
-      this.logger.error(`Error seeding doctors: ${error.message}`, error.stack);
-      throw error;
+    let created = 0;
+    for (const doc of defaultDoctors) {
+      if (!doc.name) continue;
+      const existing = await this.doctorRepository.findOne({ where: { name: doc.name } });
+      if (existing) {
+        existing.specialization = doc.specialization ?? existing.specialization;
+        existing.status = (doc.status as any) ?? existing.status;
+        existing.services_offered = doc.services_offered ?? existing.services_offered;
+        existing.working_hours = doc.working_hours ?? existing.working_hours;
+        await this.doctorRepository.save(existing);
+      } else {
+        const newDoc = this.doctorRepository.create(doc);
+        await this.doctorRepository.save(newDoc);
+        created += 1;
+      }
     }
+    this.logger.log(`Doctors seed complete. Added ${created} new doctors.`);
   }
 
   private async seedAdminUser() {
@@ -302,59 +242,37 @@ export class SeedService implements OnModuleInit {
    * (VIP via visit count, no-show risk via missed/cancelled visits).
    */
   private async seedPatientsAndAppointments() {
-    const existingPatients = await this.patientRepository.count();
-    const existingAppointments = await this.appointmentRepository.count();
-    const batchSuffix = Date.now().toString(); // keep phones/emails unique per run
-
     // Ensure prerequisites exist
     const doctors = await this.doctorRepository.find();
     const services = await this.serviceRepository.find();
 
     if (doctors.length === 0 || services.length === 0) {
-      this.logger.warn(
-        'Cannot seed patients/appointments because doctors or services are missing.',
-      );
+      this.logger.warn('Cannot seed patients/appointments because doctors or services are missing.');
       return;
     }
 
-    this.logger.log('Seeding Patients and Appointments...');
+    this.logger.log('Seeding Patients and Appointments (idempotent)...');
 
-    // Diverse patient set to surface VIP / risk / clean states on the UI.
-    // Phones/emails are made unique per run to avoid conflicts when data already exists.
-    const patients = this.patientRepository.create([
-      {
-        full_name: 'Ahmed Al Mansoori', // VIP (lots of visits)
-        phone_number: `+971-50-${batchSuffix.slice(-7)}`,
-        email: `ahmed${batchSuffix}@email.com`,
-      },
-      {
-        full_name: 'Fatima Hassan', // Risk (no-shows/cancellations)
-        phone_number: `+971-55-${(Number(batchSuffix.slice(-7)) + 1).toString().padStart(7, '0')}`,
-        email: `fatima${batchSuffix}@email.com`,
-      },
-      {
-        full_name: 'Lina Carter', // VIP + Risk
-        phone_number: `+971-56-${(Number(batchSuffix.slice(-7)) + 2).toString().padStart(7, '0')}`,
-        email: `lina${batchSuffix}@email.com`,
-      },
-      {
-        full_name: 'Omar Abdullah', // Clean (no flags)
-        phone_number: `+971-50-${(Number(batchSuffix.slice(-7)) + 3).toString().padStart(7, '0')}`,
-        email: `omar${batchSuffix}@email.com`,
-      },
-      {
-        full_name: 'Sarah Johnson', // Light risk (single no-show)
-        phone_number: `+971-52-${(Number(batchSuffix.slice(-7)) + 4).toString().padStart(7, '0')}`,
-        email: `sarah${batchSuffix}@email.com`,
-      },
-      {
-        full_name: 'Yousef Rahman', // VIP (visits only)
-        phone_number: `+971-54-${(Number(batchSuffix.slice(-7)) + 5).toString().padStart(7, '0')}`,
-        email: `yousef${batchSuffix}@email.com`,
-      },
-    ]);
+    const patientTemplates = [
+      { full_name: 'Ahmed Al Mansoori', phone_number: '+971-50-123-4567', email: 'ahmed@email.com' },
+      { full_name: 'Fatima Hassan', phone_number: '+971-55-234-5678', email: 'fatima@email.com' },
+      { full_name: 'Lina Carter', phone_number: '+971-56-678-9012', email: 'lina@email.com' },
+      { full_name: 'Omar Abdullah', phone_number: '+971-50-567-8901', email: 'omar@email.com' },
+      { full_name: 'Sarah Johnson', phone_number: '+971-52-456-7890', email: 'sarah@email.com' },
+      { full_name: 'Yousef Rahman', phone_number: '+971-54-345-6789', email: 'yousef@email.com' },
+    ];
 
-    const savedPatients = await this.patientRepository.save(patients);
+    const savedPatients: Patient[] = [];
+    for (const p of patientTemplates) {
+      const existing = await this.patientRepository.findOne({ where: { phone_number: p.phone_number } });
+      if (existing) {
+        savedPatients.push(existing);
+      } else {
+        const created = this.patientRepository.create(p);
+        const saved = await this.patientRepository.save(created);
+        savedPatients.push(saved);
+      }
+    }
 
     // Helper to generate start/end datetimes
     const makeSlot = (daysAgo: number, hour: number) => {
@@ -368,46 +286,43 @@ export class SeedService implements OnModuleInit {
     const doctor = doctors[0];
     const service = services[0];
 
-    const appointments: Partial<Appointment>[] = [];
+    const appointmentTemplates: {
+      patient: Patient;
+      daysAgo: number;
+      status: AppointmentStatus;
+      hour?: number;
+      note?: string;
+    }[] = [];
 
-    // Helper to push a block of appointments
-    const pushAppointments = (
-      patientId: string,
+    const pushTemplates = (
+      patient: Patient,
       entries: { daysAgo: number; status: AppointmentStatus; hour?: number; note?: string }[],
     ) => {
       entries.forEach((entry, idx) => {
-        const slot = makeSlot(entry.daysAgo, entry.hour ?? 9 + (idx % 3));
-        appointments.push({
-          patient_id: patientId,
-          doctor_id: doctor.id,
-          service_id: service.id,
-          start_datetime: slot.start,
-          end_datetime: slot.end,
+        appointmentTemplates.push({
+          patient,
+          daysAgo: entry.daysAgo,
           status: entry.status,
-          notes: entry.note,
+          hour: entry.hour ?? 9 + (idx % 3),
+          note: entry.note,
         });
       });
     };
 
-    // VIP (Ahmed): 12 completed visits
-    pushAppointments(savedPatients[0].id,
-      Array.from({ length: 12 }).map((_, i) => ({
-        daysAgo: 10 + i,
-        status: AppointmentStatus.COMPLETED,
-        note: 'Routine checkup',
-      })),
-    );
+    pushTemplates(savedPatients[0], Array.from({ length: 12 }).map((_, i) => ({
+      daysAgo: 10 + i,
+      status: AppointmentStatus.COMPLETED,
+      note: 'Routine checkup',
+    })));
 
-    // Risk (Fatima): multiple no-show/cancelled
-    pushAppointments(savedPatients[1].id, [
+    pushTemplates(savedPatients[1], [
       { daysAgo: 3, status: AppointmentStatus.NO_SHOW, note: 'Missed appointment' },
       { daysAgo: 9, status: AppointmentStatus.CANCELLED, note: 'Cancelled same day' },
       { daysAgo: 16, status: AppointmentStatus.CANCELLED, note: 'Cancelled 1 day prior' },
       { daysAgo: 22, status: AppointmentStatus.COMPLETED, note: 'Completed visit' },
     ]);
 
-    // VIP + Risk (Lina): 11 completed + 1 no-show
-    pushAppointments(savedPatients[2].id, [
+    pushTemplates(savedPatients[2], [
       ...Array.from({ length: 11 }).map((_, i) => ({
         daysAgo: 8 + i,
         status: AppointmentStatus.COMPLETED,
@@ -416,34 +331,49 @@ export class SeedService implements OnModuleInit {
       { daysAgo: 4, status: AppointmentStatus.NO_SHOW, note: 'Missed due to conflict' },
     ]);
 
-    // Clean (Omar): few completed, no flags
-    pushAppointments(savedPatients[3].id, [
+    pushTemplates(savedPatients[3], [
       { daysAgo: 5, status: AppointmentStatus.COMPLETED, note: 'Checkup' },
       { daysAgo: 18, status: AppointmentStatus.COMPLETED, note: 'Cleaning' },
     ]);
 
-    // Light risk (Sarah): single no-show
-    pushAppointments(savedPatients[4].id, [
+    pushTemplates(savedPatients[4], [
       { daysAgo: 6, status: AppointmentStatus.NO_SHOW, note: 'Missed slot' },
       { daysAgo: 14, status: AppointmentStatus.COMPLETED, note: 'Previous visit' },
     ]);
 
-    // VIP only (Yousef): 10 completed
-    pushAppointments(savedPatients[5].id,
-      Array.from({ length: 10 }).map((_, i) => ({
-        daysAgo: 12 + i,
-        status: AppointmentStatus.COMPLETED,
-        note: 'Routine visit',
-      })),
-    );
+    pushTemplates(savedPatients[5], Array.from({ length: 10 }).map((_, i) => ({
+      daysAgo: 12 + i,
+      status: AppointmentStatus.COMPLETED,
+      note: 'Routine visit',
+    })));
 
-    // Append appointments even if some already exist; IDs/time slots are unique per run.
-    if (appointments.length > 0) {
-      const savedAppointments = this.appointmentRepository.create(appointments);
-      await this.appointmentRepository.save(savedAppointments);
-      this.logger.log(
-        `Seeded ${savedPatients.length} patients and ${savedAppointments.length} appointments (existing patients: ${existingPatients}, existing appointments: ${existingAppointments})`,
-      );
+    let createdAppointments = 0;
+    for (const tmpl of appointmentTemplates) {
+      const slot = makeSlot(tmpl.daysAgo, tmpl.hour ?? 9);
+      const existing = await this.appointmentRepository.findOne({
+        where: {
+          patient_id: tmpl.patient.id,
+          doctor_id: doctor.id,
+          start_datetime: slot.start,
+        },
+      });
+      if (existing) continue;
+
+      const appointment = this.appointmentRepository.create({
+        patient_id: tmpl.patient.id,
+        doctor_id: doctor.id,
+        service_id: service.id,
+        start_datetime: slot.start,
+        end_datetime: slot.end,
+        status: tmpl.status,
+        notes: tmpl.note,
+      });
+      await this.appointmentRepository.save(appointment);
+      createdAppointments += 1;
     }
+
+    this.logger.log(
+      `Patients/appointments seed complete. Patients ensured: ${savedPatients.length}, new appointments: ${createdAppointments}`,
+    );
   }
 }

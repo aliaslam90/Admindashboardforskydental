@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { Calendar, Clock, User, Phone, FileText, CheckCircle2, XCircle, AlertCircle, Pill, Plus, Trash2, Filter } from 'lucide-react';
+import { useEffect, useMemo, useState } from 'react';
+import { Calendar, Clock, User, Phone, FileText, CheckCircle2, AlertCircle, Pill, Plus, Trash2, Filter } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '../../components/ui/card';
 import { Badge } from '../../components/ui/badge';
 import { Button } from '../../components/ui/button';
@@ -10,9 +10,11 @@ import { Input } from '../../components/ui/input';
 import { Label } from '../../components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../../components/ui/select';
 import { Separator } from '../../components/ui/separator';
-import { mockAppointments, mockServices, Appointment, AppointmentStatus, Doctor, Medication } from '../../data/mockData';
+import { Appointment, AppointmentStatus, Doctor, Medication, Service } from '../../data/mockData';
 import { toast } from 'sonner';
 import { cn } from '../../components/ui/utils';
+import { appointmentsApi } from '../../services/appointmentsApi';
+import { doctorsApi } from '../../services/doctorsApi';
 
 interface DoctorAppointmentsProps {
   currentDoctor: Doctor;
@@ -27,6 +29,8 @@ export function DoctorAppointments({ currentDoctor }: DoctorAppointmentsProps) {
   const [medications, setMedications] = useState<Medication[]>([]);
   const [showAddMedication, setShowAddMedication] = useState(false);
   const [dateFilter, setDateFilter] = useState<DateFilter>('all');
+  const [appointments, setAppointments] = useState<Appointment[]>([]);
+  const [services, setServices] = useState<Service[]>([]);
 
   // New medication form
   const [newMedication, setNewMedication] = useState<Partial<Medication>>({
@@ -39,8 +43,29 @@ export function DoctorAppointments({ currentDoctor }: DoctorAppointmentsProps) {
     withFood: 'any'
   });
 
-  // Filter appointments for current doctor
-  const doctorAppointments = mockAppointments.filter(apt => apt.doctorId === currentDoctor.id);
+  useEffect(() => {
+    fetchData();
+  }, [currentDoctor.id]);
+
+  const fetchData = async () => {
+    // no loading UI; still guard re-entrance
+    try {
+      const [aptRes, svcRes] = await Promise.all([
+        appointmentsApi.getAll({ doctorId: currentDoctor.id }),
+        doctorsApi.getServices(),
+      ]);
+      setAppointments(aptRes);
+      setServices(svcRes);
+    } catch (error) {
+      console.error('Failed to load doctor appointments', error);
+      toast.error('Failed to load appointments');
+    }
+  };
+
+  const doctorAppointments = useMemo(
+    () => appointments.filter(apt => apt.doctorId === currentDoctor.id),
+    [appointments, currentDoctor.id],
+  );
 
   // Date filter helpers
   const getStartOfWeek = (date: Date) => {
@@ -100,7 +125,7 @@ export function DoctorAppointments({ currentDoctor }: DoctorAppointmentsProps) {
 
   // Get service duration
   const getServiceDuration = (serviceId: string) => {
-    const service = mockServices.find(s => s.id === serviceId);
+    const service = services.find(s => s.id === serviceId);
     return service?.duration || 30;
   };
 

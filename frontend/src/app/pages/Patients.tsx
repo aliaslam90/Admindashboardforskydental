@@ -28,7 +28,6 @@ const defaultStats: PatientStats = {
 };
 
 function toDate(appointment: Appointment) {
-  // Combine date + time strings into a single Date for sorting and stats
   return new Date(`${appointment.date}T${appointment.time}`);
 }
 
@@ -43,12 +42,8 @@ function buildPatientStats(appointmentList: Appointment[]): Record<string, Patie
       stats.lastVisit = visitDate.toISOString();
     }
 
-    if (apt.status === 'no-show') {
-      stats.noShows += 1;
-    }
-    if (apt.status === 'cancelled') {
-      stats.cancellations += 1;
-    }
+    if (apt.status === 'no-show') stats.noShows += 1;
+    if (apt.status === 'cancelled') stats.cancellations += 1;
 
     acc[apt.patientId] = stats;
     return acc;
@@ -57,15 +52,8 @@ function buildPatientStats(appointmentList: Appointment[]): Record<string, Patie
 
 function deriveFlags(stats: PatientStats): Patient['flags'] {
   const flags: Patient['flags'] = [];
-
-  if (stats.totalVisits >= 10) {
-    flags.push('vip');
-  }
-
-  if (stats.noShows > 0 || stats.cancellations > 1) {
-    flags.push('no-show-risk');
-  }
-
+  if (stats.totalVisits >= 10) flags.push('vip');
+  if (stats.noShows > 0 || stats.cancellations > 1) flags.push('no-show-risk');
   return flags;
 }
 
@@ -77,25 +65,22 @@ export function Patients() {
   const [appointments, setAppointments] = useState<Appointment[]>([]);
   const [loading, setLoading] = useState(true);
 
-  const fetchPatients = async (search?: string) => {
+  useEffect(() => {
+    fetchPatients();
+  }, []);
+
+  const fetchPatients = async () => {
     setLoading(true);
     try {
       const [patientRes, appointmentRes] = await Promise.all([
-        patientsApi.getAll(search),
+        patientsApi.getAll(),
         appointmentsApi.getAll(),
       ]);
 
       const stats = buildPatientStats(appointmentRes);
-
-      const hydratedPatients = patientRes.map((patient) => {
-        const patientStats = stats[patient.id] ?? { ...defaultStats };
-
-        return {
-          ...patient,
-          totalVisits: patientStats.totalVisits,
-          lastVisit: patientStats.lastVisit,
-          flags: deriveFlags(patientStats),
-        };
+      const hydratedPatients = patientRes.map(p => {
+        const s = stats[p.id] ?? { ...defaultStats };
+        return { ...p, totalVisits: s.totalVisits, lastVisit: s.lastVisit || '', flags: deriveFlags(s) };
       });
 
       setPatients(hydratedPatients);
@@ -108,45 +93,26 @@ export function Patients() {
     }
   };
 
-  // Fetch patients when search changes (debounced lightly by useEffect tick)
-  useEffect(() => {
-    const timeout = setTimeout(() => {
-      fetchPatients(searchQuery || undefined);
-    }, 200);
-    return () => clearTimeout(timeout);
-  }, [searchQuery]);
-
-  // Filtered patients
   const filteredPatients = useMemo(() => {
     if (!searchQuery) return patients;
     const query = searchQuery.toLowerCase();
-    return patients.filter((patient) =>
+    return patients.filter(patient =>
       patient.name.toLowerCase().includes(query) ||
       patient.phone.toLowerCase().includes(query) ||
       patient.id.toLowerCase().includes(query) ||
-      patient.email?.toLowerCase().includes(query),
+      patient.email?.toLowerCase().includes(query)
     );
-  }, [patients, searchQuery]);
+  }, [searchQuery, patients]);
 
   const handleOpenPatient = (patient: Patient) => {
     setSelectedPatient(patient);
     setDialogOpen(true);
   };
 
-  // Get patient appointments
   const getPatientAppointments = (patientId: string) => {
     return appointments
-      .filter((apt) => apt.patientId === patientId)
+      .filter(apt => apt.patientId === patientId)
       .sort((a, b) => toDate(b).getTime() - toDate(a).getTime());
-  };
-
-  const formatLastVisit = (lastVisit: string | null) => {
-    if (!lastVisit) return 'No visits yet';
-    return new Date(lastVisit).toLocaleDateString('en-US', {
-      month: 'short',
-      day: 'numeric',
-      year: 'numeric',
-    });
   };
 
   return (
@@ -178,14 +144,12 @@ export function Patients() {
       <Card>
         <CardHeader>
           <CardTitle>
-            {loading
-              ? 'Loading patients...'
-              : `${filteredPatients.length} Patient${filteredPatients.length !== 1 ? 's' : ''}`}
+            {filteredPatients.length} Patient{filteredPatients.length !== 1 ? 's' : ''}
           </CardTitle>
         </CardHeader>
         <CardContent>
           {loading ? (
-            <LoadingSpinner message="Fetching patients from the backend..." />
+            <LoadingSpinner message="Loading patients..." />
           ) : filteredPatients.length === 0 ? (
             <div className="text-center py-12">
               <User className="h-12 w-12 text-gray-300 mx-auto mb-4" />
@@ -221,7 +185,11 @@ export function Patients() {
                       <TableCell className="text-sm text-gray-600">{patient.phone}</TableCell>
                       <TableCell className="text-sm text-gray-900 font-medium">{patient.totalVisits}</TableCell>
                       <TableCell className="text-sm text-gray-600">
-                        {formatLastVisit(patient.lastVisit)}
+                        {new Date(patient.lastVisit).toLocaleDateString('en-US', {
+                          month: 'short',
+                          day: 'numeric',
+                          year: 'numeric'
+                        })}
                       </TableCell>
                       <TableCell>
                         <div className="flex gap-1">
@@ -233,11 +201,6 @@ export function Patients() {
                           {patient.flags.includes('no-show-risk') && (
                             <Badge variant="secondary" className="bg-orange-100 text-orange-800 hover:bg-orange-100">
                               Risk
-                            </Badge>
-                          )}
-                          {patient.flags.length === 0 && (
-                            <Badge variant="outline" className="text-gray-500 border-gray-200">
-                              None
                             </Badge>
                           )}
                         </div>
@@ -301,13 +264,10 @@ export function Patients() {
                 <div className="bg-green-50 p-4 rounded-lg">
                   <p className="text-sm text-green-600 mb-1">Last Visit</p>
                   <p className="text-lg font-semibold text-green-700">
-                    {selectedPatient.lastVisit
-                      ? new Date(selectedPatient.lastVisit).toLocaleDateString('en-US', {
-                          month: 'short',
-                          day: 'numeric',
-                          year: 'numeric',
-                        })
-                      : 'No visits yet'}
+                    {new Date(selectedPatient.lastVisit).toLocaleDateString('en-US', {
+                      month: 'short',
+                      day: 'numeric'
+                    })}
                   </p>
                 </div>
               </div>

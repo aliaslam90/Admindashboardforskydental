@@ -137,7 +137,7 @@ export function ForgotPassword({ onBackToLogin }: ForgotPasswordProps) {
 
             <Button
               type="submit"
-              className="w-full bg-blue-600 hover:bg-blue-700"
+              className="w-full bg-[rgb(203,255,143)] hover:bg-[#AEEF5A]"
               disabled={isLoading}
             >
               {isLoading ? 'Sending...' : 'Send Reset Instructions'}

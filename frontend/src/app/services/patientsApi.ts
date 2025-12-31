@@ -24,12 +24,9 @@ function toPatient(backend: BackendPatient): Patient {
     name: backend.full_name,
     phone: backend.phone_number,
     email: backend.email,
-    emiratesIdLast4: backend.emirates_id_last4,
-    createdAt: backend.created_at,
-    updatedAt: backend.updated_at,
     // Stats derived on the frontend; default to empty values
     totalVisits: 0,
-    lastVisit: null,
+    lastVisit: '',
     flags: [],
     notes: '',
   };
