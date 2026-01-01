@@ -33,6 +33,7 @@ export function Appointments({ onCreateAppointment, selectedAppointmentId }: App
     time: ''
   });
   const [isLoading, setIsLoading] = useState(false);
+  const [isRescheduling, setIsRescheduling] = useState(false);
   const openNativePicker = (e: React.FocusEvent<HTMLInputElement> | React.MouseEvent<HTMLInputElement>) => {
     // Improves UX on browsers that support showPicker (e.g., Chrome)
     const input = e.currentTarget;
@@ -42,6 +43,13 @@ export function Appointments({ onCreateAppointment, selectedAppointmentId }: App
   };
 
   const toDateValue = (value: string) => (value ? new Date(value).getTime() : null);
+  const formatTime = (value: string) => {
+    const [h, m] = value.split(':').map(Number);
+    if (Number.isNaN(h) || Number.isNaN(m)) return value;
+    const suffix = h >= 12 ? 'PM' : 'AM';
+    const hour = h % 12 || 12;
+    return `${hour}:${m.toString().padStart(2, '0')} ${suffix}`;
+  };
 
   
   // Filters
@@ -185,24 +193,64 @@ export function Appointments({ onCreateAppointment, selectedAppointmentId }: App
     setRescheduleOpen(true);
   };
 
-  const handleSaveReschedule = () => {
+  const handleSaveReschedule = async () => {
     if (!rescheduleForm.date || !rescheduleForm.time) {
       toast.error('Please select both date and time');
       return;
     }
 
-    setAppointments(prev => 
-      prev.map(apt => 
-        apt.id === rescheduleAppointmentId 
-          ? { ...apt, date: rescheduleForm.date, time: rescheduleForm.time, updatedAt: new Date().toISOString() }
-          : apt
-      )
-    );
+    if (!rescheduleAppointmentId) {
+      toast.error('No appointment selected');
+      return;
+    }
 
-    toast.success('Appointment rescheduled successfully');
-    setRescheduleOpen(false);
-    setRescheduleAppointmentId(null);
-    setRescheduleForm({ date: '', time: '' });
+    const target = appointments.find(a => a.id === rescheduleAppointmentId);
+    if (!target) {
+      toast.error('Appointment not found');
+      return;
+    }
+
+    const serviceDuration = serviceOptions.find(s => s.id === target.serviceId)?.duration ?? 30;
+    const startDate = new Date(`${rescheduleForm.date}T${rescheduleForm.time}`);
+
+    if (Number.isNaN(startDate.getTime())) {
+      toast.error('Invalid date or time');
+      return;
+    }
+
+    const endDate = new Date(startDate.getTime() + serviceDuration * 60 * 1000);
+    const pad = (n: number) => n.toString().padStart(2, '0');
+    const formatLocal = (d: Date) =>
+      `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+
+    const start = formatLocal(startDate);
+    const end = formatLocal(endDate);
+
+    setIsRescheduling(true);
+    try {
+      const updated = await appointmentsApi.update(rescheduleAppointmentId, {
+        start_datetime: start,
+        end_datetime: end,
+      });
+
+      setAppointments(prev => 
+        prev.map(apt => 
+          apt.id === rescheduleAppointmentId 
+            ? { ...updated }
+            : apt
+        )
+      );
+
+      toast.success('Appointment rescheduled successfully');
+      setRescheduleOpen(false);
+      setRescheduleAppointmentId(null);
+      setRescheduleForm({ date: '', time: '' });
+    } catch (error) {
+      console.error('Failed to reschedule appointment', error);
+      toast.error('Failed to reschedule appointment');
+    } finally {
+      setIsRescheduling(false);
+    }
   };
 
   const handleNoShow = (id: string) => {
@@ -431,7 +479,7 @@ export function Appointments({ onCreateAppointment, selectedAppointmentId }: App
                               year: 'numeric'
                             })}
                           </p>
-                          <p className="text-xs text-gray-500">{appointment.time}</p>
+                          <p className="text-xs text-gray-500">{formatTime(appointment.time)}</p>
                         </div>
                       </TableCell>
                       <TableCell>
@@ -552,8 +600,9 @@ export function Appointments({ onCreateAppointment, selectedAppointmentId }: App
             <Button
               type="button"
               onClick={handleSaveReschedule}
+              disabled={isRescheduling}
             >
-              Reschedule
+              {isRescheduling ? 'Rescheduling...' : 'Reschedule'}
             </Button>
           </DialogFooter>
         </DialogContent>

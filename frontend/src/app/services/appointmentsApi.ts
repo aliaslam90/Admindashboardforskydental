@@ -111,7 +111,9 @@ function backendToFrontendStatus(
 function transformBackendToFrontend(
   backend: BackendAppointment,
 ): Appointment {
-  const startDate = new Date(backend.start_datetime);
+  // Preserve the time sent by backend without timezone conversion
+  const [datePart, timeWithZone] = backend.start_datetime.split('T');
+  const timePart = timeWithZone ? timeWithZone.slice(0, 5) : '';
 
   return {
     id: backend.id,
@@ -122,8 +124,8 @@ function transformBackendToFrontend(
     doctorName: backend.doctor.name,
     serviceId: backend.service_id.toString(),
     serviceName: backend.service.name,
-    date: startDate.toISOString().split('T')[0], // YYYY-MM-DD
-    time: startDate.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false }), // HH:MM
+    date: datePart || '',
+    time: timePart,
     status: backendToFrontendStatus(backend.status),
     notes: backend.notes || undefined,
     createdAt: backend.created_at,
