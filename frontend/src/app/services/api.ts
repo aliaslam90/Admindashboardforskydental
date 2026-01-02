@@ -39,12 +39,29 @@ class ApiClient {
         throw new Error(error.message || `HTTP error! status: ${response.status}`);
       }
 
-      // Handle 204 No Content
+      // Handle empty or no-content responses gracefully
       if (response.status === 204) {
         return null as T;
       }
 
-      return await response.json();
+      const contentLength = response.headers.get('content-length');
+      // Some servers mislabel 204; treat zero-length as empty
+      if (contentLength === '0') {
+        return null as T;
+      }
+
+      const text = await response.text();
+      if (!text) {
+        return null as T;
+      }
+
+      try {
+        return JSON.parse(text) as T;
+      } catch (parseErr) {
+        // If backend incorrectly returns body on 204 or invalid JSON, treat as empty success
+        console.warn('API response parse failed, treating as empty success', parseErr);
+        return null as T;
+      }
     } catch (error) {
       console.error('API request failed:', error);
       throw error;

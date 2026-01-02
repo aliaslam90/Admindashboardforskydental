@@ -115,15 +115,20 @@ function transformBackendToFrontend(
   const [datePart, timeWithZone] = backend.start_datetime.split('T');
   const timePart = timeWithZone ? timeWithZone.slice(0, 5) : '';
 
+  const patientName = backend.patient?.full_name ?? '';
+  const patientPhone = backend.patient?.phone_number ?? '';
+  const doctorName = backend.doctor?.name ?? '';
+  const serviceName = backend.service?.name ?? '';
+
   return {
     id: backend.id,
     patientId: backend.patient_id,
-    patientName: backend.patient.full_name,
-    phone: backend.patient.phone_number,
+    patientName,
+    phone: patientPhone,
     doctorId: backend.doctor_id.toString(),
-    doctorName: backend.doctor.name,
+    doctorName,
     serviceId: backend.service_id.toString(),
-    serviceName: backend.service.name,
+    serviceName,
     date: datePart || '',
     time: timePart,
     status: backendToFrontendStatus(backend.status),
@@ -161,11 +166,34 @@ class AppointmentsApi {
   }
 
   async create(data: CreateAppointmentPayload): Promise<Appointment> {
-    const backendAppointment = await apiClient.post<BackendAppointment>(
+    const backendAppointment = await apiClient.post<BackendAppointment | null>(
       '/appointments/with-patient',
       data,
     );
-    return transformBackendToFrontend(backendAppointment);
+
+    if (!backendAppointment) {
+      const [datePart, timePartRaw] = data.start_datetime.split('T');
+      const timePart = (timePartRaw || '').slice(0, 5);
+      return {
+        id: `TEMP-${Date.now()}`,
+        patientId: data.patient.id || `TEMP-PAT-${Date.now()}`,
+        patientName: data.patient.full_name,
+        phone: data.patient.phone_number,
+        email: data.patient.email,
+        doctorId: data.doctor_id.toString(),
+        doctorName: '',
+        serviceId: data.service_id.toString(),
+        serviceName: '',
+        date: datePart,
+        time: timePart,
+        status: 'booked',
+        notes: data.notes,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      };
+    }
+
+    return transformBackendToFrontend(backendAppointment as BackendAppointment);
   }
 
   async updateStatus(

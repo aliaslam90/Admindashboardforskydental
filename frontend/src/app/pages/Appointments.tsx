@@ -18,9 +18,10 @@ import { toast } from 'sonner';
 interface AppointmentsProps {
   onCreateAppointment: () => void;
   selectedAppointmentId?: string;
+  refreshKey?: number;
 }
 
-export function Appointments({ onCreateAppointment, selectedAppointmentId }: AppointmentsProps) {
+export function Appointments({ onCreateAppointment, selectedAppointmentId, refreshKey = 0 }: AppointmentsProps) {
   const [appointments, setAppointments] = useState<Appointment[]>([]);
   const [doctorOptions, setDoctorOptions] = useState<Doctor[]>([]);
   const [serviceOptions, setServiceOptions] = useState<Service[]>([]);
@@ -75,7 +76,7 @@ export function Appointments({ onCreateAppointment, selectedAppointmentId }: App
       }
     };
     fetchAppointments();
-  }, []);
+  }, [refreshKey]);
 
   // Load doctors and services for filters
   useEffect(() => {
