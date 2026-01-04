@@ -119,6 +119,7 @@ function transformBackendToFrontend(
   const patientPhone = backend.patient?.phone_number ?? '';
   const doctorName = backend.doctor?.name ?? '';
   const serviceName = backend.service?.name ?? '';
+  const serviceDuration = backend.service?.duration_minutes;
 
   return {
     id: backend.id,
@@ -129,6 +130,7 @@ function transformBackendToFrontend(
     doctorName,
     serviceId: backend.service_id.toString(),
     serviceName,
+    durationMinutes: serviceDuration,
     date: datePart || '',
     time: timePart,
     status: backendToFrontendStatus(backend.status),
@@ -165,32 +167,15 @@ class AppointmentsApi {
     return transformBackendToFrontend(backendAppointment);
   }
 
-  async create(data: CreateAppointmentPayload): Promise<Appointment> {
+  async create(data: CreateAppointmentPayload): Promise<Appointment | null> {
     const backendAppointment = await apiClient.post<BackendAppointment | null>(
       '/appointments/with-patient',
       data,
     );
 
     if (!backendAppointment) {
-      const [datePart, timePartRaw] = data.start_datetime.split('T');
-      const timePart = (timePartRaw || '').slice(0, 5);
-      return {
-        id: `TEMP-${Date.now()}`,
-        patientId: data.patient.id || `TEMP-PAT-${Date.now()}`,
-        patientName: data.patient.full_name,
-        phone: data.patient.phone_number,
-        email: data.patient.email,
-        doctorId: data.doctor_id.toString(),
-        doctorName: '',
-        serviceId: data.service_id.toString(),
-        serviceName: '',
-        date: datePart,
-        time: timePart,
-        status: 'booked',
-        notes: data.notes,
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
-      };
+      // Surface a failure so the UI can inform the user appropriately
+      throw new Error('Appointment could not be created (empty server response).');
     }
 
     return transformBackendToFrontend(backendAppointment as BackendAppointment);

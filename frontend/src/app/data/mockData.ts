@@ -83,6 +83,7 @@ export interface Appointment {
   serviceName: string;
   date: string;
   time: string;
+  durationMinutes?: number;
   status: AppointmentStatus;
   notes?: string;
   clinicalNotes?: string;

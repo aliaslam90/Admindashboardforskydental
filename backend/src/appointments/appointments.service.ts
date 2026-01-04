@@ -36,6 +36,37 @@ export class AppointmentsService {
     private readonly serviceRepository: Repository<Service>,
   ) {}
 
+  private async ensureNoOverlap(params: {
+    doctorId: number;
+    start: Date;
+    end: Date;
+    excludeAppointmentId?: string;
+  }) {
+    const { doctorId, start, end, excludeAppointmentId } = params;
+
+    const qb = this.appointmentRepository
+      .createQueryBuilder('appointment')
+      .where('appointment.doctor_id = :doctorId', { doctorId })
+      .andWhere('appointment.start_datetime < :end', { end })
+      .andWhere('appointment.end_datetime > :start', { start })
+      .andWhere('appointment.status != :cancelled', {
+        cancelled: AppointmentStatus.CANCELLED,
+      });
+
+    if (excludeAppointmentId) {
+      qb.andWhere('appointment.id != :excludeId', {
+        excludeId: excludeAppointmentId,
+      });
+    }
+
+    const conflict = await qb.getOne();
+    if (conflict) {
+      throw new BadRequestException(
+        'Doctor already has an appointment during this time range',
+      );
+    }
+  }
+
   async create(createAppointmentDto: CreateAppointmentDto): Promise<Appointment> {
     // Validate that patient exists
     const patient = await this.patientRepository.findOne({
@@ -67,15 +98,23 @@ export class AppointmentsService {
       );
     }
 
-    // Validate datetime logic
+    // Compute end time based on service duration to avoid client-side overlap errors
     const startDate = new Date(createAppointmentDto.start_datetime);
-    const endDate = new Date(createAppointmentDto.end_datetime);
+    const endDate = new Date(
+      startDate.getTime() + (service.duration_minutes ?? 0) * 60 * 1000,
+    );
 
     if (endDate <= startDate) {
       throw new BadRequestException(
         'end_datetime must be after start_datetime',
       );
     }
+
+    await this.ensureNoOverlap({
+      doctorId: doctor.id,
+      start: startDate,
+      end: endDate,
+    });
 
     try {
       const appointment = this.appointmentRepository.create({
@@ -269,6 +308,13 @@ export class AppointmentsService {
         'end_datetime must be after start_datetime',
       );
     }
+
+    await this.ensureNoOverlap({
+      doctorId: updateAppointmentDto.doctor_id || appointment.doctor_id,
+      start: startDate,
+      end: endDate,
+      excludeAppointmentId: id,
+    });
 
     // Update appointment fields
     Object.assign(appointment, {

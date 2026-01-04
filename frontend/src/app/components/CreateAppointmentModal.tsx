@@ -122,7 +122,7 @@ export function CreateAppointmentModal({
 
     setIsSubmitting(true);
     try {
-      await appointmentsApi.create({
+      const created = await appointmentsApi.create({
         patient: {
           full_name: form.patientName,
           phone_number: form.phone,
@@ -136,12 +136,25 @@ export function CreateAppointmentModal({
         notes: form.notes,
       });
 
+      if (!created) {
+        toast.error("Appointment could not be created (empty response).");
+        return;
+      }
+
       toast.success("Appointment created");
       onOpenChange(false);
       onCreated();
     } catch (error) {
       console.error("Failed to create appointment", error);
-      toast.error("Failed to create appointment");
+      const rawMessage =
+        error instanceof Error && error.message
+          ? error.message
+          : "Failed to create appointment";
+      const lower = rawMessage.toLowerCase();
+      const friendlyMessage = lower.includes("already has an appointment")
+        ? "This doctor already has an appointment in that time range. Please choose another time."
+        : rawMessage;
+      toast.error(friendlyMessage);
     } finally {
       setIsSubmitting(false);
     }

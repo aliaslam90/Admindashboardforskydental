@@ -12,6 +12,7 @@ import { StatusBadge } from '../components/StatusBadge';
 import { AppointmentDrawer } from '../components/AppointmentDrawer';
 import { Appointment, AppointmentStatus, Doctor, Service } from '../data/mockData';
 import { appointmentsApi } from '../services/appointmentsApi';
+import { cancelAppointmentFlow, rescheduleAppointmentFlow } from './appointmentActions';
 import { doctorsApi } from '../services/doctorsApi';
 import { toast } from 'sonner';
 
@@ -195,72 +196,29 @@ export function Appointments({ onCreateAppointment, selectedAppointmentId, refre
   };
 
   const handleSaveReschedule = async () => {
-    if (!rescheduleForm.date || !rescheduleForm.time) {
-      toast.error('Please select both date and time');
-      return;
-    }
-
-    if (!rescheduleAppointmentId) {
-      toast.error('No appointment selected');
-      return;
-    }
-
-    const target = appointments.find(a => a.id === rescheduleAppointmentId);
-    if (!target) {
-      toast.error('Appointment not found');
-      return;
-    }
-
-    const serviceDuration = serviceOptions.find(s => s.id === target.serviceId)?.duration ?? 30;
-    const startDate = new Date(`${rescheduleForm.date}T${rescheduleForm.time}`);
-
-    if (Number.isNaN(startDate.getTime())) {
-      toast.error('Invalid date or time');
-      return;
-    }
-
-    const endDate = new Date(startDate.getTime() + serviceDuration * 60 * 1000);
-    const pad = (n: number) => n.toString().padStart(2, '0');
-    const formatLocal = (d: Date) =>
-      `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
-
-    const start = formatLocal(startDate);
-    const end = formatLocal(endDate);
-
-    setIsRescheduling(true);
-    try {
-      const updated = await appointmentsApi.update(rescheduleAppointmentId, {
-        start_datetime: start,
-        end_datetime: end,
-      });
-
-      setAppointments(prev => 
-        prev.map(apt => 
-          apt.id === rescheduleAppointmentId 
-            ? { ...updated }
-            : apt
-        )
-      );
-
-      toast.success('Appointment rescheduled successfully');
-      setRescheduleOpen(false);
-      setRescheduleAppointmentId(null);
-      setRescheduleForm({ date: '', time: '' });
-    } catch (error) {
-      console.error('Failed to reschedule appointment', error);
-      toast.error('Failed to reschedule appointment');
-    } finally {
-      setIsRescheduling(false);
-    }
+    await rescheduleAppointmentFlow({
+      appointmentId: rescheduleAppointmentId,
+      appointments,
+      serviceOptions,
+      rescheduleForm,
+      setAppointments,
+      setRescheduleOpen,
+      setRescheduleAppointmentId,
+      setRescheduleForm,
+      setIsRescheduling,
+    });
   };
 
   const handleNoShow = (id: string) => {
     updateAppointmentStatus(id, 'no-show');
   };
 
-  const handleCancel = (id: string) => {
-    // Placeholder until cancel modal is implemented
-    toast.info(`Cancel confirmation modal would open here for ${id}`);
+  const handleCancel = async (id: string) => {
+    await cancelAppointmentFlow({
+      appointmentId: id,
+      appointments,
+      setAppointments,
+    });
   };
 
   const handleQuickAction = (appointment: Appointment, action: string) => {

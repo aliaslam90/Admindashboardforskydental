@@ -53,6 +53,19 @@ export function AppointmentDrawer({
   const canCancel = appointment.status !== 'completed' && appointment.status !== 'cancelled' && appointment.status !== 'no-show';
   const canNoShow = appointment.status !== 'completed' && appointment.status !== 'cancelled' && appointment.status !== 'no-show';
 
+  const shouldShowServiceTime =
+    appointment.status === 'booked' || appointment.status === 'confirmed';
+
+  const formatTimeRange = () => {
+    const duration = appointment.durationMinutes ?? 30;
+    const start = new Date(`${appointment.date}T${appointment.time}`);
+    if (Number.isNaN(start.getTime())) return appointment.time;
+    const end = new Date(start.getTime() + duration * 60 * 1000);
+    const fmt = (d: Date) =>
+      d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
+    return `${fmt(start)} – ${fmt(end)} (${duration} min)`;
+  };
+
   return (
     <Sheet open={open} onOpenChange={(open) => !open && onClose()}>
       <SheetContent className="w-full sm:max-w-lg overflow-y-auto">
@@ -127,7 +140,12 @@ export function AppointmentDrawer({
 
               <div className="flex items-center gap-3">
                 <Clock className="h-5 w-5 text-gray-400" />
-                <p className="text-sm text-gray-900">{appointment.time}</p>
+                <div className="text-sm text-gray-900">
+                  <p>{appointment.time}</p>
+                  {shouldShowServiceTime && (
+                    <p className="text-xs text-gray-500">{formatTimeRange()}</p>
+                  )}
+                </div>
               </div>
 
               <div className="flex items-center gap-3">
