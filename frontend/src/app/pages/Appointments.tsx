@@ -12,7 +12,7 @@ import { StatusBadge } from '../components/StatusBadge';
 import { AppointmentDrawer } from '../components/AppointmentDrawer';
 import { Appointment, AppointmentStatus, Doctor, Service } from '../data/mockData';
 import { appointmentsApi } from '../services/appointmentsApi';
-import { cancelAppointmentFlow, rescheduleAppointmentFlow } from './appointmentActions';
+import { cancelAppointmentFlow, rescheduleAppointmentFlow, updateStatusFlow } from './appointmentActions';
 import { doctorsApi } from '../services/doctorsApi';
 import { toast } from 'sonner';
 
@@ -178,16 +178,31 @@ export function Appointments({ onCreateAppointment, selectedAppointmentId, refre
     );
   };
 
-  const handleConfirm = (id: string) => {
-    updateAppointmentStatus(id, 'confirmed');
+  const handleConfirm = async (id: string) => {
+    await updateStatusFlow({
+      appointmentId: id,
+      newStatus: 'confirmed',
+      appointments,
+      setAppointments,
+    });
   };
 
-  const handleCheckIn = (id: string) => {
-    updateAppointmentStatus(id, 'checked-in');
+  const handleCheckIn = async (id: string) => {
+    await updateStatusFlow({
+      appointmentId: id,
+      newStatus: 'checked-in',
+      appointments,
+      setAppointments,
+    });
   };
 
-  const handleComplete = (id: string) => {
-    updateAppointmentStatus(id, 'completed');
+  const handleComplete = async (id: string) => {
+    await updateStatusFlow({
+      appointmentId: id,
+      newStatus: 'completed',
+      appointments,
+      setAppointments,
+    });
   };
 
   const handleReschedule = (id: string) => {
@@ -445,33 +460,35 @@ export function Appointments({ onCreateAppointment, selectedAppointmentId, refre
                         <StatusBadge status={appointment.status} />
                       </TableCell>
                       <TableCell>
-                        <DropdownMenu>
-                          <DropdownMenuTrigger asChild onClick={(e) => e.stopPropagation()}>
-                            <Button variant="ghost" size="sm">
-                              <MoreVertical className="h-4 w-4" />
-                            </Button>
-                          </DropdownMenuTrigger>
-                          <DropdownMenuContent align="end">
-                            {appointment.status === 'booked' && (
-                              <>
+                        {(appointment.status !== 'completed' && appointment.status !== 'cancelled') && (
+                          <DropdownMenu>
+                            <DropdownMenuTrigger asChild onClick={(e) => e.stopPropagation()}>
+                              <Button variant="ghost" size="sm">
+                                <MoreVertical className="h-4 w-4" />
+                              </Button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="end">
+                              {appointment.status === 'booked' && (
+                                <>
+                                  <DropdownMenuItem onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleQuickAction(appointment, 'confirm');
+                                  }}>
+                                    <CheckCircle2 className="h-4 w-4 mr-2" />
+                                    Confirm
+                                  </DropdownMenuItem>
+                                  <DropdownMenuSeparator />
+                                </>
+                              )}
+                              {(appointment.status === 'booked' || appointment.status === 'confirmed') && (
                                 <DropdownMenuItem onClick={(e) => {
                                   e.stopPropagation();
-                                  handleQuickAction(appointment, 'confirm');
+                                  handleQuickAction(appointment, 'reschedule');
                                 }}>
-                                  <CheckCircle2 className="h-4 w-4 mr-2" />
-                                  Confirm
+                                  <Edit className="h-4 w-4 mr-2" />
+                                  Reschedule
                                 </DropdownMenuItem>
-                                <DropdownMenuSeparator />
-                              </>
-                            )}
-                            <DropdownMenuItem onClick={(e) => {
-                              e.stopPropagation();
-                              handleQuickAction(appointment, 'reschedule');
-                            }}>
-                              <Edit className="h-4 w-4 mr-2" />
-                              Reschedule
-                            </DropdownMenuItem>
-                            {appointment.status !== 'completed' && appointment.status !== 'cancelled' && (
+                              )}
                               <DropdownMenuItem 
                                 onClick={(e) => {
                                   e.stopPropagation();
@@ -482,9 +499,9 @@ export function Appointments({ onCreateAppointment, selectedAppointmentId, refre
                                 <Ban className="h-4 w-4 mr-2" />
                                 Cancel
                               </DropdownMenuItem>
-                            )}
-                          </DropdownMenuContent>
-                        </DropdownMenu>
+                            </DropdownMenuContent>
+                          </DropdownMenu>
+                        )}
                       </TableCell>
                     </TableRow>
                   ))}

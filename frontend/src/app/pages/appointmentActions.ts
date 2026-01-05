@@ -4,6 +4,32 @@ import { toast } from "sonner";
 
 type SetAppointments = React.Dispatch<React.SetStateAction<Appointment[]>>;
 
+export async function updateStatusFlow(params: {
+  appointmentId: string;
+  newStatus: AppointmentStatus;
+  appointments: Appointment[];
+  setAppointments: SetAppointments;
+  onSuccess?: () => void;
+}) {
+  const { appointmentId, newStatus, appointments, setAppointments, onSuccess } = params;
+  const previous = appointments;
+
+  setAppointments((prev) =>
+    prev.map((apt) =>
+      apt.id === appointmentId ? { ...apt, status: newStatus, updatedAt: new Date().toISOString() } : apt,
+    ),
+  );
+
+  try {
+    await appointmentsApi.updateStatus(appointmentId, newStatus);
+    onSuccess?.();
+  } catch (error) {
+    console.error("Failed to update appointment status", error);
+    setAppointments(previous);
+    toast.error("Failed to update appointment status");
+  }
+}
+
 export async function cancelAppointmentFlow(params: {
   appointmentId: string;
   appointments: Appointment[];

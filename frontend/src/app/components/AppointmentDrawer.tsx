@@ -49,7 +49,7 @@ export function AppointmentDrawer({
   const canConfirm = appointment.status === 'booked';
   const canCheckIn = appointment.status === 'confirmed' || appointment.status === 'booked';
   const canComplete = appointment.status === 'checked-in' || appointment.status === 'confirmed';
-  const canReschedule = appointment.status !== 'completed' && appointment.status !== 'cancelled' && appointment.status !== 'no-show';
+  const canReschedule = appointment.status === 'booked' || appointment.status === 'confirmed';
   const canCancel = appointment.status !== 'completed' && appointment.status !== 'cancelled' && appointment.status !== 'no-show';
   const canNoShow = appointment.status !== 'completed' && appointment.status !== 'cancelled' && appointment.status !== 'no-show';
 
