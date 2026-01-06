@@ -22,7 +22,7 @@ import { toast } from "sonner";
 import { appointmentsApi } from "../services/appointmentsApi";
 import { Doctor, Service } from "../data/mockData";
 
-type CreateAppointmentForm = {
+export type CreateAppointmentForm = {
   patientName: string;
   phone: string;
   email: string;
@@ -33,12 +33,15 @@ type CreateAppointmentForm = {
   notes: string;
 };
 
+export type CreateAppointmentPrefill = Partial<CreateAppointmentForm>;
+
 type CreateAppointmentModalProps = {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   doctorOptions: Doctor[];
   serviceOptions: Service[];
   onCreated: () => void;
+  initialValues?: CreateAppointmentPrefill;
 };
 
 const pad = (n: number) => n.toString().padStart(2, "0");
@@ -53,8 +56,9 @@ export function CreateAppointmentModal({
   doctorOptions,
   serviceOptions,
   onCreated,
+  initialValues,
 }: CreateAppointmentModalProps) {
-  const [form, setForm] = useState<CreateAppointmentForm>({
+  const emptyForm: CreateAppointmentForm = {
     patientName: "",
     phone: "",
     email: "",
@@ -63,23 +67,19 @@ export function CreateAppointmentModal({
     date: "",
     time: "",
     notes: "",
-  });
+  };
+
+  const [form, setForm] = useState<CreateAppointmentForm>(emptyForm);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   useEffect(() => {
     if (open) {
       setForm({
-        patientName: "",
-        phone: "",
-        email: "",
-        doctorId: "",
-        serviceId: "",
-        date: "",
-        time: "",
-        notes: "",
+        ...emptyForm,
+        ...initialValues,
       });
     }
-  }, [open]);
+  }, [open, initialValues]);
 
   const handleSave = async () => {
     if (!form.patientName.trim()) {

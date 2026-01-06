@@ -15,9 +15,10 @@ import { appointmentsApi } from '../services/appointmentsApi';
 import { cancelAppointmentFlow, rescheduleAppointmentFlow, updateStatusFlow } from './appointmentActions';
 import { doctorsApi } from '../services/doctorsApi';
 import { toast } from 'sonner';
+import { CreateAppointmentPrefill } from '../components/CreateAppointmentModal';
 
 interface AppointmentsProps {
-  onCreateAppointment: () => void;
+  onCreateAppointment: (prefill?: CreateAppointmentPrefill) => void;
   selectedAppointmentId?: string;
   refreshKey?: number;
 }
@@ -259,7 +260,7 @@ export function Appointments({ onCreateAppointment, selectedAppointmentId, refre
           <h1 className="text-2xl font-semibold text-gray-900">Appointments</h1>
           <p className="text-sm text-gray-500 mt-1">Manage and track all appointments</p>
         </div>
-        <Button onClick={onCreateAppointment}>
+        <Button onClick={() => onCreateAppointment()}>
           <Plus className="h-4 w-4 mr-2" />
           New Appointment
         </Button>
@@ -409,7 +410,7 @@ export function Appointments({ onCreateAppointment, selectedAppointmentId, refre
                 variant="outline" 
                 size="sm" 
                 className="mt-4"
-                onClick={onCreateAppointment}
+                onClick={() => onCreateAppointment()}
               >
                 Create Appointment
               </Button>

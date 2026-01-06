@@ -9,10 +9,11 @@ import { Skeleton } from '../components/ui/skeleton';
 import { Appointment } from '../data/mockData';
 import { appointmentsApi } from '../services/appointmentsApi';
 import { toast } from 'sonner';
+import { CreateAppointmentPrefill } from '../components/CreateAppointmentModal';
 
 interface DashboardProps {
   onNavigate: (page: string, data?: any) => void;
-  onCreateAppointment: () => void;
+  onCreateAppointment: (prefill?: CreateAppointmentPrefill) => void;
 }
 
 export function Dashboard({ onNavigate, onCreateAppointment }: DashboardProps) {
@@ -60,7 +61,7 @@ export function Dashboard({ onNavigate, onCreateAppointment }: DashboardProps) {
           <h1 className="text-2xl font-semibold text-gray-900">Dashboard</h1>
           <p className="text-sm text-gray-500 mt-1">Welcome back! Here's today's overview</p>
         </div>
-        <Button onClick={onCreateAppointment}>
+        <Button onClick={() => onCreateAppointment()}>
           <Plus className="h-4 w-4 mr-2" />
           Create Appointment
         </Button>
@@ -132,7 +133,7 @@ export function Dashboard({ onNavigate, onCreateAppointment }: DashboardProps) {
                   variant="outline" 
                   size="sm" 
                   className="mt-4"
-                  onClick={onCreateAppointment}
+                  onClick={() => onCreateAppointment()}
                 >
                   Create Appointment
                 </Button>

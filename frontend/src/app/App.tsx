@@ -22,7 +22,10 @@ import { DoctorProfile } from "./pages/doctor/DoctorProfile";
 import { Admin, Doctor, Service } from "./data/mockData";
 import { toast } from "sonner";
 import { doctorsApi } from "./services/doctorsApi";
-import { CreateAppointmentModal } from "./components/CreateAppointmentModal";
+import {
+  CreateAppointmentModal,
+  CreateAppointmentPrefill,
+} from "./components/CreateAppointmentModal";
 
 type Page =
   | "dashboard"
@@ -88,6 +91,8 @@ function AppContent() {
   const [pageData, setPageData] = useState<any>(null);
   const [createAppointmentOpen, setCreateAppointmentOpen] =
     useState(false);
+  const [createAppointmentInitial, setCreateAppointmentInitial] =
+    useState<CreateAppointmentPrefill | null>(null);
   const [appointmentsRefreshKey, setAppointmentsRefreshKey] =
     useState(0);
   const [isHydrated, setIsHydrated] = useState(false);
@@ -154,7 +159,8 @@ function AppContent() {
     localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(payload));
   }, [authPage, currentAdmin, currentDoctor, currentPage, doctorPage, isHydrated]);
 
-  const handleCreateAppointment = () => {
+  const handleCreateAppointment = (prefill?: CreateAppointmentPrefill) => {
+    setCreateAppointmentInitial(prefill ?? null);
     setCreateAppointmentOpen(true);
   };
 
@@ -341,7 +347,13 @@ function AppContent() {
 
       <CreateAppointmentModal
         open={createAppointmentOpen}
-        onOpenChange={setCreateAppointmentOpen}
+        onOpenChange={(open) => {
+          if (!open) {
+            setCreateAppointmentInitial(null);
+          }
+          setCreateAppointmentOpen(open);
+        }}
+        initialValues={createAppointmentInitial ?? undefined}
         doctorOptions={doctorOptions}
         serviceOptions={serviceOptions}
         onCreated={() => {
