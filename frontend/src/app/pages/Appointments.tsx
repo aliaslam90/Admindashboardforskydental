@@ -547,6 +547,7 @@ export function Appointments({ onCreateAppointment, selectedAppointmentId, refre
                   type="date"
                   value={rescheduleForm.date}
                   onChange={(e) => setRescheduleForm({ ...rescheduleForm, date: e.target.value })}
+                  min={new Date().toISOString().split("T")[0]}
                   className="pr-10"
                 />
                 <CalendarIcon className="absolute right-3 top-1/2 -translate-y-1/2 h-5 w-5 text-blue-600 pointer-events-none" />

@@ -112,6 +112,12 @@ export async function rescheduleAppointmentFlow(params: {
     return;
   }
 
+  const now = new Date();
+  if (startDate.getTime() <= now.getTime()) {
+    toast.error("Cannot reschedule to a past time");
+    return;
+  }
+
   const endDate = new Date(startDate.getTime() + serviceDuration * 60 * 1000);
   const pad = (n: number) => n.toString().padStart(2, "0");
   const formatLocal = (d: Date) =>

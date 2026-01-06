@@ -116,9 +116,13 @@ export function CreateAppointmentModal({
     }
 
     const startDate = new Date(`${form.date}T${form.time}`);
-    const endDate = new Date(
-      startDate.getTime() + (service.duration ?? 30) * 60 * 1000,
-    );
+    const now = new Date();
+    if (startDate.getTime() <= now.getTime()) {
+      toast.error("Appointment time must be in the future");
+      return;
+    }
+
+    const endDate = new Date(startDate.getTime() + (service.duration ?? 30) * 60 * 1000);
 
     setIsSubmitting(true);
     try {

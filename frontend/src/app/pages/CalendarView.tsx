@@ -57,6 +57,25 @@ export function CalendarView({ onCreateAppointment }: CalendarViewProps) {
     return `${hour}:${m.toString().padStart(2, '0')} ${suffix}`;
   };
 
+  const statusLabel = (status: AppointmentStatus) => {
+    switch (status) {
+      case 'booked':
+        return 'Booked';
+      case 'confirmed':
+        return 'Confirmed';
+      case 'checked-in':
+        return 'Checked-in';
+      case 'completed':
+        return 'Completed';
+      case 'cancelled':
+        return 'Cancelled';
+      case 'no-show':
+        return 'No-show';
+      default:
+        return status;
+    }
+  };
+
   const isSlotWithinDoctorAvailability = (doctorId: string, date: Date, time: string) => {
     const doctor = doctorById[doctorId];
     if (!doctor) return true;
@@ -239,6 +258,14 @@ export function CalendarView({ onCreateAppointment }: CalendarViewProps) {
               <div className="w-3 h-3 rounded bg-gray-100 border-l-4 border-gray-500" />
               <span className="text-gray-600">Completed</span>
             </div>
+            <div className="flex items-center gap-2">
+              <div className="w-3 h-3 rounded bg-red-100 border-l-4 border-red-500" />
+              <span className="text-gray-600">Cancelled</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <div className="w-3 h-3 rounded bg-orange-100 border-l-4 border-orange-500" />
+              <span className="text-gray-600">No-show</span>
+            </div>
           </div>
         </CardContent>
       </Card>
@@ -285,6 +312,11 @@ export function CalendarView({ onCreateAppointment }: CalendarViewProps) {
                         className="p-2 border-r border-gray-200 last:border-r-0 min-h-[80px] cursor-pointer hover:bg-blue-50 transition-colors"
                         onClick={() => {
                           const dateStr = day.toISOString().split('T')[0];
+                          const start = new Date(`${dateStr}T${time}`);
+                          if (start.getTime() <= Date.now()) {
+                            toast.error("Cannot create an appointment in the past");
+                            return;
+                          }
                           if (selectedDoctor !== 'all') {
                             const available = isSlotWithinDoctorAvailability(selectedDoctor, day, time);
                             if (!available) {
@@ -315,6 +347,7 @@ export function CalendarView({ onCreateAppointment }: CalendarViewProps) {
                               <div 
                                 key={apt.id} 
                                 className={`p-2 rounded text-xs border-l-4 ${statusColors[apt.status]} hover:shadow-sm transition-shadow cursor-pointer`}
+                                title={statusLabel(apt.status)}
                                 onClick={(e) => {
                                   e.stopPropagation();
                                   // Open appointment details
