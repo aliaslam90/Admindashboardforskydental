@@ -12,6 +12,10 @@ import { UpdateDoctorDto } from './dto/update-doctor.dto';
 import { CreateDoctorLeaveDto } from './dto/create-doctor-leave.dto';
 import { UpdateDoctorLeaveDto } from './dto/update-doctor-leave.dto';
 import { Service } from '../services/entities/service.entity';
+import {
+  Appointment,
+  AppointmentStatus,
+} from '../appointments/entities/appointment.entity';
 
 @Injectable()
 export class DoctorsService {
@@ -22,6 +26,8 @@ export class DoctorsService {
     private readonly doctorLeaveRepository: Repository<DoctorLeave>,
     @InjectRepository(Service)
     private readonly serviceRepository: Repository<Service>,
+    @InjectRepository(Appointment)
+    private readonly appointmentRepository: Repository<Appointment>,
   ) {}
 
   async create(createDoctorDto: CreateDoctorDto): Promise<Doctor> {
@@ -131,6 +137,14 @@ export class DoctorsService {
 
   async remove(id: number): Promise<void> {
     const doctor = await this.findOne(id);
+
+    // Cancel then delete all appointments for this doctor to avoid FK violations
+    await this.appointmentRepository.update(
+      { doctor_id: id },
+      { status: AppointmentStatus.CANCELLED },
+    );
+    await this.appointmentRepository.delete({ doctor_id: id });
+
     await this.doctorRepository.remove(doctor);
   }
 
