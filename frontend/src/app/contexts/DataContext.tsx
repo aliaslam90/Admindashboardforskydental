@@ -1,17 +1,15 @@
 import { createContext, useContext, useState, useEffect, ReactNode } from 'react';
-import { 
-  mockAppointments, 
-  mockDoctors, 
-  mockPatients, 
-  mockServices,
-  mockAdmins,
-  Appointment, 
-  Doctor, 
-  Patient, 
+import {
+  Appointment,
+  Doctor,
+  Patient,
   Service,
   Admin,
-  AppointmentStatus 
+  AppointmentStatus,
 } from '../data/mockData';
+import { appointmentsApi, AppointmentFilters } from '../services/appointmentsApi';
+import { patientsApi } from '../services/patientsApi';
+import { doctorsApi } from '../services/doctorsApi';
 import { toast } from 'sonner';
 
 /**
@@ -59,21 +57,34 @@ interface DataContextType {
 
   // Appointment Actions
   updateAppointment: (id: string, updates: Partial<Appointment>) => Promise<void>;
-  createAppointment: (appointment: Omit<Appointment, 'id'>) => Promise<Appointment>;
+  createAppointment: (
+    payload: {
+      patient: { full_name: string; phone_number: string; email?: string };
+      doctor_id: number;
+      service_id: number;
+      start_datetime: string;
+      end_datetime: string;
+      status?: string;
+      notes?: string;
+    },
+  ) => Promise<Appointment>;
   deleteAppointment: (id: string) => Promise<void>;
-  
+  fetchAppointments: (filters?: AppointmentFilters) => Promise<void>;
+
   // Doctor Actions
   updateDoctor: (id: string, updates: Partial<Doctor>) => Promise<void>;
-  
+  fetchDoctors: () => Promise<void>;
+
   // Patient Actions
   updatePatient: (id: string, updates: Partial<Patient>) => Promise<void>;
-  createPatient: (patient: Omit<Patient, 'id'>) => Promise<Patient>;
-  
+  createPatient: (patient: { full_name: string; phone_number: string; email: string }) => Promise<Patient>;
+  fetchPatients: (search?: string) => Promise<void>;
+
   // Notification Actions
   getNotifications: (userId: string, userType: 'admin' | 'doctor') => Notification[];
   markNotificationAsRead: (notificationId: string) => void;
   clearAllNotifications: (userId: string) => void;
-  
+
   // Sync Actions
   syncData: () => Promise<void>;
 }
@@ -81,11 +92,11 @@ interface DataContextType {
 const DataContext = createContext<DataContextType | undefined>(undefined);
 
 export function DataProvider({ children }: { children: ReactNode }) {
-  const [appointments, setAppointments] = useState<Appointment[]>(mockAppointments);
-  const [doctors, setDoctors] = useState<Doctor[]>(mockDoctors);
-  const [patients, setPatients] = useState<Patient[]>(mockPatients);
-  const [services, setServices] = useState<Service[]>(mockServices);
-  const [admins, setAdmins] = useState<Admin[]>(mockAdmins);
+  const [appointments, setAppointments] = useState<Appointment[]>([]);
+  const [doctors, setDoctors] = useState<Doctor[]>([]);
+  const [patients, setPatients] = useState<Patient[]>([]);
+  const [services, setServices] = useState<Service[]>([]);
+  const [admins, setAdmins] = useState<Admin[]>([]);
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [syncState, setSyncState] = useState<SyncState>({
     isSyncing: false,
@@ -93,18 +104,13 @@ export function DataProvider({ children }: { children: ReactNode }) {
     syncMessage: null
   });
 
-  // Simulate API delay
-  const simulateApiCall = async (duration: number = 800) => {
-    return new Promise(resolve => setTimeout(resolve, duration));
-  };
+  // Initial sync on mount
+  useEffect(() => {
+    syncData();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
-  // Show sync feedback
-  const showSyncFeedback = (message: string) => {
-    setSyncState(prev => ({ ...prev, syncMessage: message }));
-    setTimeout(() => {
-      setSyncState(prev => ({ ...prev, syncMessage: null }));
-    }, 3000);
-  };
+  // Helpers to map backend models already handled by API clients
 
   // Create notification
   const createNotification = (
@@ -137,134 +143,39 @@ export function DataProvider({ children }: { children: ReactNode }) {
    */
   const updateAppointment = async (id: string, updates: Partial<Appointment>) => {
     setSyncState({ isSyncing: true, lastSyncTime: null, syncMessage: 'Saving changes...' });
-    
     try {
-      // Simulate API call
-      await simulateApiCall();
-      
-      const appointment = appointments.find(a => a.id === id);
-      if (!appointment) throw new Error('Appointment not found');
-
-      // Update appointment
-      setAppointments(prev => prev.map(apt => 
-        apt.id === id ? { ...apt, ...updates, updatedAt: new Date().toISOString() } : apt
-      ));
-
-      // Create notifications based on update type
-      if (updates.status) {
-        const doctor = doctors.find(d => d.id === appointment.doctorId);
-        
-        // Notify admin
-        if (updates.status === 'checked-in') {
-          createNotification(
-            'appointment_checked_in',
-            'Patient Checked In',
-            `${appointment.patientName} has been checked in by ${doctor?.name}`,
-            'admin',
-            'admin',
-            id,
-            appointment.doctorId
-          );
-        } else if (updates.status === 'completed') {
-          createNotification(
-            'appointment_completed',
-            'Appointment Completed',
-            `${doctor?.name} completed appointment with ${appointment.patientName}`,
-            'admin',
-            'admin',
-            id,
-            appointment.doctorId
-          );
-        } else if (updates.status === 'cancelled') {
-          createNotification(
-            'appointment_cancelled',
-            'Appointment Cancelled',
-            `Appointment with ${appointment.patientName} has been cancelled`,
-            'admin',
-            'admin',
-            id
-          );
-          // Notify doctor
-          createNotification(
-            'appointment_cancelled',
-            'Appointment Cancelled',
-            `Your appointment with ${appointment.patientName} has been cancelled`,
-            appointment.doctorId,
-            'doctor',
-            id
-          );
-        }
-      }
-
-      if (updates.date || updates.time) {
-        createNotification(
-          'appointment_rescheduled',
-          'Appointment Rescheduled',
-          `Appointment with ${appointment.patientName} has been rescheduled`,
-          appointment.doctorId,
-          'doctor',
-          id
-        );
-      }
-
-      setSyncState({
-        isSyncing: false,
-        lastSyncTime: new Date(),
-        syncMessage: null
+      const updated = await appointmentsApi.update(id, {
+        notes: updates.notes,
+        status: updates.status,
       });
-      
-      toast.success('Updated successfully', {
-        description: 'Changes synced across all portals'
-      });
+      setAppointments(prev =>
+        prev.map(apt => (apt.id === id ? { ...apt, ...updated } : apt)),
+      );
+      setSyncState({ isSyncing: false, lastSyncTime: new Date(), syncMessage: null });
+      toast.success('Updated successfully', { description: 'Changes synced across all portals' });
     } catch (error) {
       setSyncState({ isSyncing: false, lastSyncTime: null, syncMessage: null });
-      toast.error('Update failed', {
-        description: 'Please try again'
-      });
+      toast.error('Update failed', { description: 'Please try again' });
       throw error;
     }
   };
 
-  /**
-   * API: POST /api/appointments
-   * Creates new appointment and notifies relevant users
-   */
-  const createAppointment = async (appointmentData: Omit<Appointment, 'id'>): Promise<Appointment> => {
+  const createAppointment = async (payload: {
+    patient: { full_name: string; phone_number: string; email?: string };
+    doctor_id: number;
+    service_id: number;
+    start_datetime: string;
+    end_datetime: string;
+    status?: string;
+    notes?: string;
+  }): Promise<Appointment> => {
     setSyncState({ isSyncing: true, lastSyncTime: null, syncMessage: 'Creating appointment...' });
-    
     try {
-      await simulateApiCall();
-      
-      const newAppointment: Appointment = {
-        ...appointmentData,
-        id: `APT${Date.now()}`,
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString()
-      };
-
-      setAppointments(prev => [...prev, newAppointment]);
-
-      // Notify doctor
-      createNotification(
-        'appointment_created',
-        'New Appointment',
-        `New appointment with ${newAppointment.patientName} scheduled for ${new Date(newAppointment.date).toLocaleDateString()}`,
-        newAppointment.doctorId,
-        'doctor',
-        newAppointment.id
-      );
-
-      setSyncState({
-        isSyncing: false,
-        lastSyncTime: new Date(),
-        syncMessage: null
-      });
-      
-      toast.success('Appointment created', {
-        description: 'Doctor has been notified'
-      });
-
-      return newAppointment;
+      const created = await appointmentsApi.create(payload);
+      setAppointments(prev => [...prev, created]);
+      setSyncState({ isSyncing: false, lastSyncTime: new Date(), syncMessage: null });
+      toast.success('Appointment created', { description: 'Doctor has been notified' });
+      return created;
     } catch (error) {
       setSyncState({ isSyncing: false, lastSyncTime: null, syncMessage: null });
       toast.error('Creation failed');
@@ -272,22 +183,12 @@ export function DataProvider({ children }: { children: ReactNode }) {
     }
   };
 
-  /**
-   * API: DELETE /api/appointments/{id}
-   */
   const deleteAppointment = async (id: string) => {
     setSyncState({ isSyncing: true, lastSyncTime: null, syncMessage: 'Deleting appointment...' });
-    
     try {
-      await simulateApiCall();
+      await appointmentsApi.delete(id);
       setAppointments(prev => prev.filter(apt => apt.id !== id));
-      
-      setSyncState({
-        isSyncing: false,
-        lastSyncTime: new Date(),
-        syncMessage: null
-      });
-      
+      setSyncState({ isSyncing: false, lastSyncTime: new Date(), syncMessage: null });
       toast.success('Appointment deleted');
     } catch (error) {
       setSyncState({ isSyncing: false, lastSyncTime: null, syncMessage: null });
@@ -302,35 +203,17 @@ export function DataProvider({ children }: { children: ReactNode }) {
    */
   const updateDoctor = async (id: string, updates: Partial<Doctor>) => {
     setSyncState({ isSyncing: true, lastSyncTime: null, syncMessage: 'Saving doctor profile...' });
-    
     try {
-      await simulateApiCall();
-      
-      setDoctors(prev => prev.map(doc => 
-        doc.id === id ? { ...doc, ...updates } : doc
-      ));
-
-      // Notify all admins
-      const doctor = doctors.find(d => d.id === id);
-      createNotification(
-        'doctor_updated',
-        'Doctor Profile Updated',
-        `${doctor?.name || 'A doctor'} updated their profile information`,
-        'admin',
-        'admin',
-        undefined,
-        id
-      );
-
-      setSyncState({
-        isSyncing: false,
-        lastSyncTime: new Date(),
-        syncMessage: null
+      const updated = await doctorsApi.update(id, {
+        name: updates.name,
+        specialization: updates.specialization,
+        services: updates.services,
+        availability: updates.availability,
+        status: updates.status,
       });
-      
-      toast.success('Profile updated', {
-        description: 'Changes synced to admin dashboard'
-      });
+      setDoctors(prev => prev.map(doc => (doc.id === id ? updated : doc)));
+      setSyncState({ isSyncing: false, lastSyncTime: new Date(), syncMessage: null });
+      toast.success('Profile updated', { description: 'Changes synced to admin dashboard' });
     } catch (error) {
       setSyncState({ isSyncing: false, lastSyncTime: null, syncMessage: null });
       toast.error('Update failed');
@@ -343,19 +226,14 @@ export function DataProvider({ children }: { children: ReactNode }) {
    */
   const updatePatient = async (id: string, updates: Partial<Patient>) => {
     setSyncState({ isSyncing: true, lastSyncTime: null, syncMessage: 'Updating patient...' });
-    
     try {
-      await simulateApiCall();
-      setPatients(prev => prev.map(pat => 
-        pat.id === id ? { ...pat, ...updates } : pat
-      ));
-      
-      setSyncState({
-        isSyncing: false,
-        lastSyncTime: new Date(),
-        syncMessage: null
+      const updated = await patientsApi.update(id, {
+        full_name: updates.name,
+        phone_number: updates.phone,
+        email: updates.email,
       });
-      
+      setPatients(prev => prev.map(pat => (pat.id === id ? updated : pat)));
+      setSyncState({ isSyncing: false, lastSyncTime: new Date(), syncMessage: null });
       toast.success('Patient updated');
     } catch (error) {
       setSyncState({ isSyncing: false, lastSyncTime: null, syncMessage: null });
@@ -367,25 +245,12 @@ export function DataProvider({ children }: { children: ReactNode }) {
   /**
    * API: POST /api/patients
    */
-  const createPatient = async (patientData: Omit<Patient, 'id'>): Promise<Patient> => {
+  const createPatient = async (patientData: { full_name: string; phone_number: string; email: string }): Promise<Patient> => {
     setSyncState({ isSyncing: true, lastSyncTime: null, syncMessage: 'Creating patient...' });
-    
     try {
-      await simulateApiCall();
-      
-      const newPatient: Patient = {
-        ...patientData,
-        id: `PAT${Date.now()}`
-      };
-
+      const newPatient = await patientsApi.create(patientData);
       setPatients(prev => [...prev, newPatient]);
-      
-      setSyncState({
-        isSyncing: false,
-        lastSyncTime: new Date(),
-        syncMessage: null
-      });
-      
+      setSyncState({ isSyncing: false, lastSyncTime: new Date(), syncMessage: null });
       toast.success('Patient created');
       return newPatient;
     } catch (error) {
@@ -414,30 +279,39 @@ export function DataProvider({ children }: { children: ReactNode }) {
     setNotifications(prev => prev.filter(n => n.userId !== userId));
   };
 
+  const fetchAppointments = async (filters?: AppointmentFilters) => {
+    const data = await appointmentsApi.getAll(filters);
+    setAppointments(data);
+  };
+
+  const fetchDoctors = async () => {
+    const data = await doctorsApi.getAll();
+    setDoctors(data);
+  };
+
+  const fetchPatients = async (search?: string) => {
+    const data = await patientsApi.getAll(search);
+    setPatients(data);
+  };
+
+  const fetchServices = async () => {
+    const data = await doctorsApi.getServices();
+    setServices(data);
+  };
+
   /**
    * API: GET /api/sync
    * Syncs all data from backend
    */
   const syncData = async () => {
     setSyncState({ isSyncing: true, lastSyncTime: null, syncMessage: 'Syncing data...' });
-    
     try {
-      await simulateApiCall(1200);
-      
-      // In production, fetch from API:
-      // const [appointmentsRes, doctorsRes, patientsRes, servicesRes] = await Promise.all([
-      //   fetch('/api/appointments'),
-      //   fetch('/api/doctors'),
-      //   fetch('/api/patients'),
-      //   fetch('/api/services')
-      // ]);
-      
+      await Promise.all([fetchAppointments(), fetchDoctors(), fetchPatients(), fetchServices()]);
       setSyncState({
         isSyncing: false,
         lastSyncTime: new Date(),
-        syncMessage: null
+        syncMessage: null,
       });
-      
       toast.success('Data synced successfully');
     } catch (error) {
       setSyncState({ isSyncing: false, lastSyncTime: null, syncMessage: null });
@@ -456,13 +330,17 @@ export function DataProvider({ children }: { children: ReactNode }) {
     updateAppointment,
     createAppointment,
     deleteAppointment,
+    fetchAppointments,
     updateDoctor,
+    fetchDoctors,
     updatePatient,
     createPatient,
+    fetchPatients,
     getNotifications,
     markNotificationAsRead,
     clearAllNotifications,
-    syncData
+    syncData,
+    fetchServices,
   };
 
   return <DataContext.Provider value={value}>{children}</DataContext.Provider>;

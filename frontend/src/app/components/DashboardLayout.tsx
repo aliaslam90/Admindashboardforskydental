@@ -3,7 +3,6 @@ import {
   LayoutDashboard, 
   Calendar, 
   Users, 
-  UserCog, 
   Briefcase, 
   Bell, 
   Settings, 
@@ -13,6 +12,7 @@ import {
   ChevronDown,
   Stethoscope
 } from 'lucide-react';
+import image_6ed9d1dbe20e8b3479eed332bf1c51ffbc9e9f7c from '../../assets/6ed9d1dbe20e8b3479eed332bf1c51ffbc9e9f7c.png';
 import { cn } from './ui/utils';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from './ui/dropdown-menu';
 import { NotificationCenter } from './NotificationCenter';
@@ -61,7 +61,7 @@ export function DashboardLayout({ children, currentPage, onNavigate, currentAdmi
           <div className="h-16 flex items-center justify-between px-6 border-b border-gray-200">
             <div className="flex items-center gap-3">
               <ImageWithFallback 
-                src="/logo.png" 
+                src={image_6ed9d1dbe20e8b3479eed332bf1c51ffbc9e9f7c}
                 alt="Sky Dental Center" 
                 className="h-10 w-auto"
                 fallbackIcon={<LayoutDashboard className="h-10 w-10 text-primary" />}

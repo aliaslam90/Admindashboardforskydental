@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Calendar, Clock, CheckCircle2, XCircle, Plus } from 'lucide-react';
 import { KPICard } from '../components/KPICard';
 import { StatusBadge } from '../components/StatusBadge';
@@ -6,30 +6,52 @@ import { Button } from '../components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../components/ui/table';
 import { Skeleton } from '../components/ui/skeleton';
-import { mockAppointments } from '../data/mockData';
+import { Appointment } from '../data/mockData';
+import { appointmentsApi } from '../services/appointmentsApi';
+import { toast } from 'sonner';
+import { CreateAppointmentPrefill } from '../components/CreateAppointmentModal';
 
 interface DashboardProps {
   onNavigate: (page: string, data?: any) => void;
-  onCreateAppointment: () => void;
+  onCreateAppointment: (prefill?: CreateAppointmentPrefill) => void;
 }
 
 export function Dashboard({ onNavigate, onCreateAppointment }: DashboardProps) {
-  const [isLoading] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
+  const [todayAppointments, setTodayAppointments] = useState<Appointment[]>([]);
+  const [upcomingAppointments, setUpcomingAppointments] = useState<Appointment[]>([]);
 
-  // Calculate KPIs
-  const today = new Date().toISOString().split('T')[0];
-  const todayAppointments = mockAppointments.filter(apt => apt.date === today);
+  useEffect(() => {
+    const fetchData = async () => {
+      setIsLoading(true);
+      const todayStr = new Date().toISOString().split('T')[0];
+      const tomorrow = new Date();
+      tomorrow.setDate(tomorrow.getDate() + 1);
+      const nextWeek = new Date();
+      nextWeek.setDate(nextWeek.getDate() + 7);
+
+      const fmt = (d: Date) => d.toISOString().split('T')[0];
+
+      try {
+        const [todayList, upcomingList] = await Promise.all([
+          appointmentsApi.getAll({ dateFrom: todayStr, dateTo: todayStr }),
+          appointmentsApi.getAll({ dateFrom: fmt(tomorrow), dateTo: fmt(nextWeek) }),
+        ]);
+        setTodayAppointments(todayList);
+        setUpcomingAppointments(upcomingList);
+      } catch (error) {
+        console.error('Failed to load dashboard data', error);
+        toast.error('Failed to load dashboard data');
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    fetchData();
+  }, []);
+
   const completedToday = todayAppointments.filter(apt => apt.status === 'completed');
   const cancelledToday = todayAppointments.filter(apt => apt.status === 'cancelled' || apt.status === 'no-show');
-  
-  // Upcoming appointments (next 7 days)
-  const nextWeek = new Date();
-  nextWeek.setDate(nextWeek.getDate() + 7);
-  const upcomingAppointments = mockAppointments.filter(apt => {
-    const aptDate = new Date(apt.date);
-    const todayDate = new Date(today);
-    return aptDate > todayDate && aptDate <= nextWeek;
-  });
 
   return (
     <div className="space-y-6">
@@ -39,7 +61,7 @@ export function Dashboard({ onNavigate, onCreateAppointment }: DashboardProps) {
           <h1 className="text-2xl font-semibold text-gray-900">Dashboard</h1>
           <p className="text-sm text-gray-500 mt-1">Welcome back! Here's today's overview</p>
         </div>
-        <Button onClick={onCreateAppointment}>
+        <Button onClick={() => onCreateAppointment()}>
           <Plus className="h-4 w-4 mr-2" />
           Create Appointment
         </Button>
@@ -111,7 +133,7 @@ export function Dashboard({ onNavigate, onCreateAppointment }: DashboardProps) {
                   variant="outline" 
                   size="sm" 
                   className="mt-4"
-                  onClick={onCreateAppointment}
+                  onClick={() => onCreateAppointment()}
                 >
                   Create Appointment
                 </Button>

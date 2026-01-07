@@ -1,10 +1,14 @@
-import { useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { User, Phone, Mail, Calendar, FileText, Search } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '../../components/ui/card';
 import { Badge } from '../../components/ui/badge';
 import { Input } from '../../components/ui/input';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '../../components/ui/dialog';
-import { mockAppointments, mockPatients, Doctor } from '../../data/mockData';
+import { Appointment, Doctor, Patient } from '../../data/mockData';
+import { appointmentsApi } from '../../services/appointmentsApi';
+import { patientsApi } from '../../services/patientsApi';
+import { LoadingSpinner } from '../../components/LoadingSpinner';
+import { toast } from 'sonner';
 
 interface DoctorPatientsProps {
   currentDoctor: Doctor;
@@ -12,31 +16,90 @@ interface DoctorPatientsProps {
 
 export function DoctorPatients({ currentDoctor }: DoctorPatientsProps) {
   const [searchQuery, setSearchQuery] = useState('');
-  const [selectedPatient, setSelectedPatient] = useState<any>(null);
+  const [selectedPatient, setSelectedPatient] = useState<Patient | null>(null);
   const [detailsOpen, setDetailsOpen] = useState(false);
+  const [appointments, setAppointments] = useState<Appointment[]>([]);
+  const [patients, setPatients] = useState<Patient[]>([]);
+  const [loading, setLoading] = useState(true);
 
-  // Get unique patients who have appointments with this doctor
-  const doctorPatientIds = new Set(
-    mockAppointments
-      .filter(apt => apt.doctorId === currentDoctor.id)
-      .map(apt => apt.patientId)
-  );
+  useEffect(() => {
+    fetchData();
+  }, [currentDoctor.id]);
 
-  const doctorPatients = mockPatients.filter(patient => doctorPatientIds.has(patient.id));
+  const fetchData = async () => {
+    setLoading(true);
+    try {
+      const [appts, patientRes] = await Promise.all([
+        appointmentsApi.getAll({ doctorId: currentDoctor.id }),
+        patientsApi.getAll(),
+      ]);
+      const patientMap = new Map(patientRes.map(p => [p.id, p]));
+      setAppointments(appts);
+      setPatients(derivePatients(appts, currentDoctor.id, patientMap));
+    } catch (error) {
+      console.error('Failed to load doctor patients', error);
+      toast.error('Failed to load patients');
+    } finally {
+      setLoading(false);
+    }
+  };
 
-  // Get patient's appointment history with this doctor
+  const derivePatients = (
+    appts: Appointment[],
+    doctorId: string,
+    patientMap: Map<string, Patient>,
+  ): Patient[] => {
+    const map = new Map<string, Patient>();
+    appts
+      .filter(a => a.doctorId === doctorId)
+      .forEach(a => {
+        if (!map.has(a.patientId)) {
+          const pInfo = patientMap.get(a.patientId);
+          map.set(a.patientId, {
+            id: a.patientId,
+            name: a.patientName,
+            phone: a.phone,
+            email: pInfo?.email || '',
+            totalVisits: 0,
+            lastVisit: '',
+            flags: [],
+            notes: '',
+          });
+        }
+        const p = map.get(a.patientId)!;
+        p.totalVisits += 1;
+        const date = a.date;
+        if (!p.lastVisit || date > p.lastVisit) p.lastVisit = date;
+      });
+
+    // Derive flags: VIP if >=10 visits, risk if any cancelled/no-show
+    appts.forEach(a => {
+      const p = map.get(a.patientId);
+      if (!p) return;
+      if (a.status === 'cancelled' || a.status === 'no-show') {
+        if (!p.flags.includes('no-show-risk')) p.flags.push('no-show-risk');
+      }
+    });
+    map.forEach(p => {
+      if (p.totalVisits >= 10 && !p.flags.includes('vip')) p.flags.push('vip');
+    });
+
+    return Array.from(map.values());
+  };
+
   const getPatientAppointments = (patientId: string) => {
-    return mockAppointments.filter(
+    return appointments.filter(
       apt => apt.patientId === patientId && apt.doctorId === currentDoctor.id
     );
   };
 
-  // Filter patients based on search
-  const filteredPatients = doctorPatients.filter(patient =>
-    patient.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    patient.phone.includes(searchQuery) ||
-    patient.email?.toLowerCase().includes(searchQuery.toLowerCase())
-  );
+  const filteredPatients = useMemo(() => {
+    return patients.filter(patient =>
+      patient.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      patient.phone.includes(searchQuery) ||
+      patient.email?.toLowerCase().includes(searchQuery.toLowerCase())
+    );
+  }, [patients, searchQuery]);
 
   const handleViewPatient = (patient: any) => {
     setSelectedPatient(patient);
@@ -61,7 +124,7 @@ export function DoctorPatients({ currentDoctor }: DoctorPatientsProps) {
               </div>
               <div>
                 <p className="text-sm text-gray-600">Total Patients</p>
-                <p className="text-2xl font-semibold text-gray-900">{doctorPatients.length}</p>
+                <p className="text-2xl font-semibold text-gray-900">{patients.length}</p>
               </div>
             </div>
           </CardContent>
@@ -76,7 +139,7 @@ export function DoctorPatients({ currentDoctor }: DoctorPatientsProps) {
               <div>
                 <p className="text-sm text-gray-600">VIP Patients</p>
                 <p className="text-2xl font-semibold text-gray-900">
-                  {doctorPatients.filter(p => p.flags.includes('vip')).length}
+                  {patients.filter(p => p.flags.includes('vip')).length}
                 </p>
               </div>
             </div>
@@ -92,7 +155,7 @@ export function DoctorPatients({ currentDoctor }: DoctorPatientsProps) {
               <div>
                 <p className="text-sm text-gray-600">Total Visits</p>
                 <p className="text-2xl font-semibold text-gray-900">
-                  {mockAppointments.filter(apt => apt.doctorId === currentDoctor.id).length}
+                  {appointments.length}
                 </p>
               </div>
             </div>
@@ -119,7 +182,9 @@ export function DoctorPatients({ currentDoctor }: DoctorPatientsProps) {
           </div>
 
           <div className="space-y-3">
-            {filteredPatients.length > 0 ? (
+            {loading ? (
+              <LoadingSpinner message="Loading patients..." />
+            ) : filteredPatients.length > 0 ? (
               filteredPatients.map(patient => {
                 const appointments = getPatientAppointments(patient.id);
                 const completedVisits = appointments.filter(apt => apt.status === 'completed').length;

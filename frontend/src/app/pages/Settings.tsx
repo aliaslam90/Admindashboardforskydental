@@ -11,7 +11,7 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, Di
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '../components/ui/alert-dialog';
 import { Badge } from '../components/ui/badge';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../components/ui/table';
-import { mockAdmins, Admin, AdminRole } from '../data/mockData';
+import { Admin, AdminRole } from '../data/mockData';
 import { toast } from 'sonner';
 
 interface SettingsProps {
@@ -19,7 +19,28 @@ interface SettingsProps {
   onLogout: () => void;
 }
 
-export function Settings({ currentAdmin = mockAdmins[0], onLogout }: SettingsProps) {
+export function Settings({ currentAdmin, onLogout }: SettingsProps) {
+  const fallbackAdmin: Admin = currentAdmin ?? {
+    id: 'admin-local',
+    name: 'Admin',
+    email: 'admin@example.com',
+    phone: '',
+    role: 'super-admin',
+    status: 'active',
+    permissions: {
+      dashboard: true,
+      appointments: true,
+      calendar: true,
+      patients: true,
+      doctors: true,
+      services: true,
+      notifications: true,
+      settings: true,
+      adminManagement: true
+    },
+    lastLogin: new Date().toISOString(),
+    createdAt: new Date().toISOString()
+  };
   const [bufferTime, setBufferTime] = useState('15');
   const [cancellationWindow, setCancellationWindow] = useState('24');
   const [calendarConnected, setCalendarConnected] = useState(true);
@@ -29,7 +50,7 @@ export function Settings({ currentAdmin = mockAdmins[0], onLogout }: SettingsPro
   const [editAdminOpen, setEditAdminOpen] = useState(false);
   const [deleteAdminOpen, setDeleteAdminOpen] = useState(false);
   const [selectedAdmin, setSelectedAdmin] = useState<Admin | null>(null);
-  const [admins, setAdmins] = useState<Admin[]>(mockAdmins);
+  const [admins, setAdmins] = useState<Admin[]>([fallbackAdmin]);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   // Admin Form State

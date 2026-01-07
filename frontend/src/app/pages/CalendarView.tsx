@@ -1,20 +1,25 @@
-import { useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { ChevronLeft, ChevronRight, Plus } from 'lucide-react';
 import { Button } from '../components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../components/ui/select';
-import { Badge } from '../components/ui/badge';
-import { mockAppointments, mockDoctors, AppointmentStatus } from '../data/mockData';
-import { StatusBadge } from '../components/StatusBadge';
+import { Appointment, AppointmentStatus, Doctor } from '../data/mockData';
+import { appointmentsApi } from '../services/appointmentsApi';
+import { doctorsApi } from '../services/doctorsApi';
+import { toast } from 'sonner';
+import { CreateAppointmentPrefill } from '../components/CreateAppointmentModal';
 
 interface CalendarViewProps {
-  onCreateAppointment: () => void;
+  onCreateAppointment: (prefill?: CreateAppointmentPrefill) => void;
 }
 
 export function CalendarView({ onCreateAppointment }: CalendarViewProps) {
   const [currentDate, setCurrentDate] = useState(new Date());
   const [view, setView] = useState<'day' | 'week'>('day');
   const [selectedDoctor, setSelectedDoctor] = useState<string>('all');
+  const [appointments, setAppointments] = useState<Appointment[]>([]);
+  const [doctorOptions, setDoctorOptions] = useState<Doctor[]>([]);
+  const [isLoading, setIsLoading] = useState(false);
 
   const timeSlots = Array.from({ length: 10 }, (_, i) => {
     const hour = i + 9; // 9 AM to 6 PM
@@ -35,9 +40,61 @@ export function CalendarView({ onCreateAppointment }: CalendarViewProps) {
 
   const weekDays = view === 'week' ? getWeekDays(currentDate) : [currentDate];
 
+  const doctorById = useMemo(
+    () =>
+      doctorOptions.reduce<Record<string, Doctor>>((acc, doc) => {
+        acc[doc.id] = doc;
+        return acc;
+      }, {}),
+    [doctorOptions],
+  );
+
+  const formatTime = (value: string) => {
+    const [h, m] = value.split(':').map(Number);
+    if (Number.isNaN(h) || Number.isNaN(m)) return value;
+    const suffix = h >= 12 ? 'PM' : 'AM';
+    const hour = h % 12 || 12;
+    return `${hour}:${m.toString().padStart(2, '0')} ${suffix}`;
+  };
+
+  const statusLabel = (status: AppointmentStatus) => {
+    switch (status) {
+      case 'booked':
+        return 'Booked';
+      case 'confirmed':
+        return 'Confirmed';
+      case 'checked-in':
+        return 'Checked-in';
+      case 'completed':
+        return 'Completed';
+      case 'cancelled':
+        return 'Cancelled';
+      case 'no-show':
+        return 'No-show';
+      default:
+        return status;
+    }
+  };
+
+  const isSlotWithinDoctorAvailability = (doctorId: string, date: Date, time: string) => {
+    const doctor = doctorById[doctorId];
+    if (!doctor) return true;
+    const availability = doctor.availability || [];
+    if (availability.length === 0) return true;
+
+    const weekday = date.toLocaleDateString('en-US', { weekday: 'long' });
+    const dayAvailability = availability.find(
+      (a) => a.day.toLowerCase() === weekday.toLowerCase(),
+    );
+    if (!dayAvailability || !dayAvailability.slots?.length) return true;
+    return dayAvailability.slots.some(
+      (slot) => time >= slot.start && time < slot.end,
+    );
+  };
+
   const getAppointmentsForSlot = (date: Date, time: string) => {
     const dateStr = date.toISOString().split('T')[0];
-    return mockAppointments.filter(apt => {
+    return appointments.filter(apt => {
       if (apt.date !== dateStr) return false;
       if (selectedDoctor !== 'all' && apt.doctorId !== selectedDoctor) return false;
       
@@ -45,6 +102,45 @@ export function CalendarView({ onCreateAppointment }: CalendarViewProps) {
       return apt.time.startsWith(time.split(':')[0]);
     });
   };
+
+  useEffect(() => {
+    const loadDoctors = async () => {
+      try {
+        const doctors = await doctorsApi.getAll();
+        setDoctorOptions(doctors);
+      } catch (error) {
+        console.error('Failed to load doctors', error);
+        toast.error('Failed to load doctors');
+      }
+    };
+    loadDoctors();
+  }, []);
+
+  useEffect(() => {
+    const fetchAppointments = async () => {
+      setIsLoading(true);
+      const days = view === 'week' ? getWeekDays(currentDate) : [currentDate];
+      const start = days[0];
+      const end = days[days.length - 1];
+      const format = (d: Date) => d.toISOString().split('T')[0];
+
+      try {
+        const results = await appointmentsApi.getAll({
+          dateFrom: format(start),
+          dateTo: format(end),
+          ...(selectedDoctor !== 'all' ? { doctorId: selectedDoctor } : {}),
+        });
+        setAppointments(results);
+      } catch (error) {
+        console.error('Failed to load calendar appointments', error);
+        toast.error('Failed to load calendar appointments');
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    fetchAppointments();
+  }, [currentDate, view, selectedDoctor]);
 
   const navigateDate = (direction: 'prev' | 'next') => {
     const newDate = new Date(currentDate);
@@ -120,7 +216,7 @@ export function CalendarView({ onCreateAppointment }: CalendarViewProps) {
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">All Doctors</SelectItem>
-                  {mockDoctors.map(doctor => (
+                  {doctorOptions.map(doctor => (
                     <SelectItem key={doctor.id} value={doctor.id}>
                       {doctor.name}
                     </SelectItem>
@@ -162,6 +258,14 @@ export function CalendarView({ onCreateAppointment }: CalendarViewProps) {
               <div className="w-3 h-3 rounded bg-gray-100 border-l-4 border-gray-500" />
               <span className="text-gray-600">Completed</span>
             </div>
+            <div className="flex items-center gap-2">
+              <div className="w-3 h-3 rounded bg-red-100 border-l-4 border-red-500" />
+              <span className="text-gray-600">Cancelled</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <div className="w-3 h-3 rounded bg-orange-100 border-l-4 border-orange-500" />
+              <span className="text-gray-600">No-show</span>
+            </div>
           </div>
         </CardContent>
       </Card>
@@ -198,7 +302,7 @@ export function CalendarView({ onCreateAppointment }: CalendarViewProps) {
                   style={{ gridTemplateColumns: `80px repeat(${weekDays.length}, 1fr)` }}
                 >
                   <div className="p-3 border-r border-gray-200 text-sm text-gray-500 font-medium">
-                    {time}
+                    {formatTime(time)}
                   </div>
                   {weekDays.map((day, idx) => {
                     const appointments = getAppointmentsForSlot(day, time);
@@ -207,8 +311,25 @@ export function CalendarView({ onCreateAppointment }: CalendarViewProps) {
                         key={idx} 
                         className="p-2 border-r border-gray-200 last:border-r-0 min-h-[80px] cursor-pointer hover:bg-blue-50 transition-colors"
                         onClick={() => {
-                          // Open create appointment modal with pre-filled date/time
-                          onCreateAppointment();
+                          const dateStr = day.toISOString().split('T')[0];
+                          const start = new Date(`${dateStr}T${time}`);
+                          if (start.getTime() <= Date.now()) {
+                            toast.error("Cannot create an appointment in the past");
+                            return;
+                          }
+                          if (selectedDoctor !== 'all') {
+                            const available = isSlotWithinDoctorAvailability(selectedDoctor, day, time);
+                            if (!available) {
+                              toast.error("This doctor isn't available in this slot.");
+                              return;
+                            }
+                          }
+
+                          onCreateAppointment({
+                            date: dateStr,
+                            time,
+                            doctorId: selectedDoctor !== 'all' ? selectedDoctor : '',
+                          });
                         }}
                       >
                         <div className="space-y-1">
@@ -226,13 +347,28 @@ export function CalendarView({ onCreateAppointment }: CalendarViewProps) {
                               <div 
                                 key={apt.id} 
                                 className={`p-2 rounded text-xs border-l-4 ${statusColors[apt.status]} hover:shadow-sm transition-shadow cursor-pointer`}
+                                title={statusLabel(apt.status)}
                                 onClick={(e) => {
                                   e.stopPropagation();
                                   // Open appointment details
                                 }}
                               >
                                 <p className="font-medium text-gray-900 truncate">{apt.patientName}</p>
-                                <p className="text-gray-600 truncate">{apt.serviceName}</p>
+                                <p className="text-gray-600 truncate">
+                                  {formatTime(apt.time)} • {apt.serviceName}
+                                </p>
+                                <p className="text-gray-500 text-[11px]">
+                                  {(() => {
+                                    const start = new Date(`${apt.date}T${apt.time}`);
+                                    const minutes = apt.durationMinutes ?? 30;
+                                    const end = new Date(start.getTime() + minutes * 60000);
+                                    const endString = `${end
+                                      .getHours()
+                                      .toString()
+                                      .padStart(2, '0')}:${end.getMinutes().toString().padStart(2, '0')}`;
+                                    return `${formatTime(apt.time)} – ${formatTime(endString)} (${minutes} min)`;
+                                  })()}
+                                </p>
                                 {selectedDoctor === 'all' && (
                                   <p className="text-gray-500 truncate text-[10px] mt-0.5">{apt.doctorName}</p>
                                 )}

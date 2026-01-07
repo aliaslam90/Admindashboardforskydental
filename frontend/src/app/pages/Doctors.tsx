@@ -1,5 +1,5 @@
-import { useState, useMemo } from 'react';
-import { Stethoscope, Calendar, Clock, ChevronRight, Plus, Trash2, X, Edit, AlertTriangle, UserX, CalendarOff } from 'lucide-react';
+import { useEffect, useMemo, useState } from 'react';
+import { Stethoscope, Calendar, Clock, ChevronRight, Plus, Trash2, X, Edit, UserX } from 'lucide-react';
 import { Button } from '../components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../components/ui/table';
@@ -12,16 +12,18 @@ import { Label } from '../components/ui/label';
 import { Checkbox } from '../components/ui/checkbox';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../components/ui/select';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../components/ui/tabs';
-import { mockDoctors, mockServices, mockAppointments, Doctor, BlockedLeave } from '../data/mockData';
+import { Doctor, BlockedLeave, Service, Appointment } from '../data/mockData';
 import { toast } from 'sonner';
+import { doctorsApi } from '../services/doctorsApi';
+import { appointmentsApi } from '../services/appointmentsApi';
 
 const daysOfWeek = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
 
 export function Doctors() {
   const [selectedDoctor, setSelectedDoctor] = useState<Doctor | null>(null);
   const [dialogOpen, setDialogOpen] = useState(false);
-  const [addDoctorOpen, setAddDoctorOpen] = useState(false);
-  const [editDoctorOpen, setEditDoctorOpen] = useState(false);
+  const [formOpen, setFormOpen] = useState(false);
+  const [formMode, setFormMode] = useState<'add' | 'edit'>('add');
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [toggleStatusDialogOpen, setToggleStatusDialogOpen] = useState(false);
   const [blockLeaveOpen, setBlockLeaveOpen] = useState(false);
@@ -46,8 +48,56 @@ export function Doctors() {
     notes: ''
   });
 
-  // Local state for blocked leaves (in real app, this would come from API/database)
-  const [doctorLeaves, setDoctorLeaves] = useState<Record<string, BlockedLeave[]>>({});
+  // Local state for blocked leaves (UI-only for now)
+  const [, setDoctorLeaves] = useState<Record<string, BlockedLeave[]>>({});
+  const [doctors, setDoctors] = useState<Doctor[]>([]);
+  const [services, setServices] = useState<Service[]>([]);
+  const [appointments, setAppointments] = useState<Appointment[]>([]);
+  const [isLoading, setIsLoading] = useState(false);
+  const hasEditChanges = useMemo(() => {
+    if (formMode !== 'edit' || !selectedDoctor) return false;
+    const normalize = (payload: { name: string; specialization: string; services: string[]; availability: any }) => ({
+      name: payload.name.trim(),
+      specialization: payload.specialization.trim(),
+      services: [...payload.services].sort(),
+      availability: payload.availability,
+    });
+    const current = normalize(doctorForm);
+    const original = normalize(selectedDoctor);
+    return JSON.stringify(current) !== JSON.stringify(original);
+  }, [doctorForm, formMode, selectedDoctor]);
+
+  const hasAddMinimum = useMemo(() => {
+    if (formMode !== 'add') return true;
+    return (
+      doctorForm.name.trim().length > 0 &&
+      doctorForm.specialization.trim().length > 0 &&
+      doctorForm.services.length > 0 &&
+      doctorForm.availability.length > 0
+    );
+  }, [doctorForm, formMode]);
+
+  useEffect(() => {
+    const loadData = async () => {
+      setIsLoading(true);
+      try {
+        const [doctorsRes, servicesRes, appointmentsRes] = await Promise.all([
+          doctorsApi.getAll(),
+          doctorsApi.getServices(),
+          appointmentsApi.getAll(),
+        ]);
+        setDoctors(doctorsRes);
+        setServices(servicesRes);
+        setAppointments(appointmentsRes);
+      } catch (error) {
+        console.error('Failed to load doctors/services/appointments', error);
+        toast.error('Failed to load doctors data');
+      } finally {
+        setIsLoading(false);
+      }
+    };
+    loadData();
+  }, []);
 
   const handleOpenDoctor = (doctor: Doctor) => {
     setSelectedDoctor(doctor);
@@ -55,7 +105,8 @@ export function Doctors() {
   };
 
   const handleOpenAddDoctor = () => {
-    setAddDoctorOpen(true);
+    setFormMode('add');
+    setFormOpen(true);
     // Reset form
     setDoctorForm({
       name: '',
@@ -67,7 +118,8 @@ export function Doctors() {
 
   const handleOpenEditDoctor = (doctor: Doctor) => {
     setSelectedDoctor(doctor);
-    setEditDoctorOpen(true);
+    setFormMode('edit');
+    setFormOpen(true);
     // Set form with doctor's data
     setDoctorForm({
       name: doctor.name,
@@ -198,14 +250,25 @@ export function Doctors() {
 
     setIsSubmitting(true);
 
-    // Simulate API call
-    setTimeout(() => {
+    try {
+      const created = await doctorsApi.create({
+        name: doctorForm.name,
+        specialization: doctorForm.specialization,
+        services: doctorForm.services,
+        availability: doctorForm.availability,
+        status: 'active',
+      });
+      setDoctors((prev) => [...prev, created]);
       toast.success('Doctor added successfully', {
         description: `${doctorForm.name} has been added to the system`
       });
+      setFormOpen(false);
+    } catch (error) {
+      console.error('Failed to add doctor', error);
+      toast.error('Failed to add doctor');
+    } finally {
       setIsSubmitting(false);
-      setAddDoctorOpen(false);
-    }, 1500);
+    }
   };
 
   const handleEditDoctor = async () => {
@@ -213,40 +276,69 @@ export function Doctors() {
 
     setIsSubmitting(true);
 
-    // Simulate API call
-    setTimeout(() => {
+    if (!selectedDoctor) {
+      toast.error('No doctor selected');
+      setIsSubmitting(false);
+      return;
+    }
+    try {
+      const updated = await doctorsApi.update(selectedDoctor.id, {
+        name: doctorForm.name,
+        specialization: doctorForm.specialization,
+        services: doctorForm.services,
+        availability: doctorForm.availability,
+      });
+      setDoctors((prev) => prev.map((d) => (d.id === selectedDoctor.id ? updated : d)));
+      setSelectedDoctor(updated);
       toast.success('Doctor updated successfully', {
         description: `${doctorForm.name} has been updated in the system`
       });
+      setFormOpen(false);
+    } catch (error) {
+      console.error('Failed to update doctor', error);
+      toast.error('Failed to update doctor');
+    } finally {
       setIsSubmitting(false);
-      setEditDoctorOpen(false);
-    }, 1500);
+    }
   };
 
   const handleDeleteDoctor = async () => {
+    if (!selectedDoctor) return;
     setIsSubmitting(true);
-
-    // Simulate API call
-    setTimeout(() => {
+    try {
+      await doctorsApi.delete(selectedDoctor.id);
+      setDoctors((prev) => prev.filter((d) => d.id !== selectedDoctor.id));
       toast.success('Doctor deleted successfully', {
-        description: `${selectedDoctor?.name} has been removed from the system`
+        description: `${selectedDoctor.name} has been removed from the system`
       });
-      setIsSubmitting(false);
       setDeleteDialogOpen(false);
-    }, 1500);
+      setSelectedDoctor(null);
+    } catch (error) {
+      console.error('Failed to delete doctor', error);
+      toast.error('Failed to delete doctor');
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   const handleToggleStatusDoctor = async () => {
+    if (!selectedDoctor) return;
     setIsSubmitting(true);
-
-    // Simulate API call
-    setTimeout(() => {
+    const nextStatus = selectedDoctor.status === 'active' ? 'inactive' : 'active';
+    try {
+      const updated = await doctorsApi.update(selectedDoctor.id, { status: nextStatus });
+      setDoctors((prev) => prev.map((d) => (d.id === selectedDoctor.id ? updated : d)));
+      setSelectedDoctor(updated);
       toast.success('Doctor status updated successfully', {
-        description: `${selectedDoctor?.name} status has been updated in the system`
+        description: `${selectedDoctor.name} status has been updated to ${nextStatus}`
       });
-      setIsSubmitting(false);
       setToggleStatusDialogOpen(false);
-    }, 1500);
+    } catch (error) {
+      console.error('Failed to update doctor status', error);
+      toast.error('Failed to update doctor status');
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   const handleBlockLeave = async () => {
@@ -265,23 +357,36 @@ export function Doctors() {
       setIsSubmitting(false);
       setBlockLeaveOpen(false);
 
-      // Add leave to local state
+      // Add leave to local state (UI only)
       if (selectedDoctor) {
-        const newLeaves = [...(doctorLeaves[selectedDoctor.id] || []), leaveForm];
+        const newLeave: BlockedLeave = {
+          id: crypto.randomUUID ? crypto.randomUUID() : String(Date.now()),
+          doctorId: selectedDoctor.id,
+          startDate: leaveForm.startDate,
+          endDate: leaveForm.endDate,
+          leaveType: leaveForm.leaveType as BlockedLeave['leaveType'],
+          timeSlot:
+            leaveForm.leaveType === 'partial'
+              ? { start: leaveForm.startTime, end: leaveForm.endTime }
+              : undefined,
+          reason: leaveForm.reason,
+          notes: leaveForm.notes,
+          createdAt: new Date().toISOString(),
+        };
         setDoctorLeaves(prev => ({
           ...prev,
-          [selectedDoctor.id]: newLeaves
+          [selectedDoctor.id]: [...(prev[selectedDoctor.id] || []), newLeave],
         }));
       }
     }, 1500);
   };
 
   const getDoctorServices = (serviceIds: string[]) => {
-    return mockServices.filter(s => serviceIds.includes(s.id));
+    return services.filter(s => serviceIds.includes(s.id));
   };
 
   const getDoctorAppointments = (doctorId: string) => {
-    return mockAppointments.filter(a => a.doctorId === doctorId);
+    return appointments.filter(a => a.doctorId === doctorId);
   };
 
   return (
@@ -300,52 +405,58 @@ export function Doctors() {
 
       {/* Doctors Grid */}
       <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
-        {mockDoctors.map(doctor => (
-          <Card 
-            key={doctor.id} 
-            className="cursor-pointer hover:shadow-lg transition-shadow"
-            onClick={() => handleOpenDoctor(doctor)}
-          >
-            <CardHeader>
-              <div className="flex items-start justify-between">
-                <div className="flex items-center gap-3">
-                  <div className="w-12 h-12 rounded-full bg-blue-100 flex items-center justify-center">
-                    <Stethoscope className="h-6 w-6 text-blue-600" />
+        {isLoading ? (
+          <p className="text-sm text-gray-500">Loading doctors...</p>
+        ) : doctors.length === 0 ? (
+          <div className="col-span-full text-sm text-gray-500">No doctors found.</div>
+        ) : (
+          doctors.map((doctor) => (
+            <Card 
+              key={doctor.id} 
+              className="cursor-pointer hover:shadow-lg transition-shadow"
+              onClick={() => handleOpenDoctor(doctor)}
+            >
+              <CardHeader>
+                <div className="flex items-start justify-between">
+                  <div className="flex items-center gap-3">
+                    <div className="w-12 h-12 rounded-full bg-blue-100 flex items-center justify-center">
+                      <Stethoscope className="h-6 w-6 text-blue-600" />
+                    </div>
+                    <div>
+                      <CardTitle className="text-base">{doctor.name}</CardTitle>
+                      <p className="text-sm text-gray-500 mt-0.5">{doctor.specialization}</p>
+                    </div>
+                  </div>
+                  <Badge 
+                    variant="secondary" 
+                    className={doctor.status === 'active' 
+                      ? 'bg-green-100 text-green-700 hover:bg-green-100' 
+                      : 'bg-gray-100 text-gray-700 hover:bg-gray-100'
+                    }
+                  >
+                    {doctor.status === 'active' ? 'Active' : 'Inactive'}
+                  </Badge>
+                </div>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-3">
+                  <div>
+                    <p className="text-xs text-gray-500 mb-2">Services Offered</p>
+                    <p className="text-sm text-gray-900">{getDoctorServices(doctor.services).length} services</p>
                   </div>
                   <div>
-                    <CardTitle className="text-base">{doctor.name}</CardTitle>
-                    <p className="text-sm text-gray-500 mt-0.5">{doctor.specialization}</p>
+                    <p className="text-xs text-gray-500 mb-2">Working Days</p>
+                    <p className="text-sm text-gray-900">{doctor.availability.length} days/week</p>
+                  </div>
+                  <div className="flex items-center justify-between pt-2 border-t">
+                    <span className="text-sm text-blue-600">View Details</span>
+                    <ChevronRight className="h-4 w-4 text-blue-600" />
                   </div>
                 </div>
-                <Badge 
-                  variant="secondary" 
-                  className={doctor.status === 'active' 
-                    ? 'bg-green-100 text-green-700 hover:bg-green-100' 
-                    : 'bg-gray-100 text-gray-700 hover:bg-gray-100'
-                  }
-                >
-                  {doctor.status === 'active' ? 'Active' : 'Inactive'}
-                </Badge>
-              </div>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-3">
-                <div>
-                  <p className="text-xs text-gray-500 mb-2">Services Offered</p>
-                  <p className="text-sm text-gray-900">{getDoctorServices(doctor.services).length} services</p>
-                </div>
-                <div>
-                  <p className="text-xs text-gray-500 mb-2">Working Days</p>
-                  <p className="text-sm text-gray-900">{doctor.availability.length} days/week</p>
-                </div>
-                <div className="flex items-center justify-between pt-2 border-t">
-                  <span className="text-sm text-blue-600">View Details</span>
-                  <ChevronRight className="h-4 w-4 text-blue-600" />
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-        ))}
+              </CardContent>
+            </Card>
+          ))
+        )}
       </div>
 
       {/* Doctor Detail Dialog */}
@@ -582,18 +693,20 @@ export function Doctors() {
 
       {/* Add/Edit Doctor Form Component */}
       <DoctorFormDialog
-        open={addDoctorOpen || editDoctorOpen}
+        open={formOpen}
         onOpenChange={(open) => {
+          setFormOpen(open);
           if (!open) {
-            setAddDoctorOpen(false);
-            setEditDoctorOpen(false);
+            setFormMode('add');
           }
         }}
-        isEdit={editDoctorOpen}
+        isEdit={formMode === 'edit'}
         doctorForm={doctorForm}
         setDoctorForm={setDoctorForm}
-        onSubmit={editDoctorOpen ? handleEditDoctor : handleSubmitDoctor}
+        onSubmit={formMode === 'edit' ? handleEditDoctor : handleSubmitDoctor}
         isSubmitting={isSubmitting}
+        services={services}
+        canSubmit={formMode === 'edit' ? hasEditChanges : hasAddMinimum}
         handleServiceToggle={handleServiceToggle}
         handleAddAvailabilityDay={handleAddAvailabilityDay}
         handleAddTimeSlot={handleAddTimeSlot}
@@ -607,7 +720,7 @@ export function Doctors() {
           <AlertDialogHeader>
             <AlertDialogTitle>Are you absolutely sure?</AlertDialogTitle>
             <AlertDialogDescription>
-              This action cannot be undone. This will permanently delete the doctor and all related data.
+              This action cannot be undone. Deleting this doctor will also cancel and delete all of their appointments. Are you sure you want to proceed?
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
@@ -808,6 +921,8 @@ function DoctorFormDialog({
   setDoctorForm,
   onSubmit,
   isSubmitting,
+  services,
+  canSubmit,
   handleServiceToggle,
   handleAddAvailabilityDay,
   handleAddTimeSlot,
@@ -821,6 +936,8 @@ function DoctorFormDialog({
   setDoctorForm: any;
   onSubmit: () => void;
   isSubmitting: boolean;
+  services: Service[];
+  canSubmit: boolean;
   handleServiceToggle: (serviceId: string) => void;
   handleAddAvailabilityDay: (day: string) => void;
   handleAddTimeSlot: (day: string) => void;
@@ -863,23 +980,27 @@ function DoctorFormDialog({
 
           {/* Services Offered */}
           <div>
-            <h3 className="text-sm font-medium text-gray-900 mb-3">Services Offered</h3>
-            <div className="grid gap-2 sm:grid-cols-2">
-              {mockServices.map(service => (
-                <div key={service.id} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
-                  <div>
-                    <p className="text-sm font-medium text-gray-900">{service.name}</p>
-                    <p className="text-xs text-gray-500">{service.category}</p>
-                  </div>
-                  <div className="text-right">
-                    <Checkbox 
-                      checked={doctorForm.services.includes(service.id)}
-                      onCheckedChange={() => handleServiceToggle(service.id)}
-                    />
-                  </div>
-                </div>
-              ))}
-            </div>
+              <h3 className="text-sm font-medium text-gray-900 mb-3">Services Offered</h3>
+              <div className="grid gap-2 sm:grid-cols-2">
+                {services.length === 0 ? (
+                  <p className="text-sm text-gray-500">No services available</p>
+                ) : (
+                  services.map(service => (
+                    <div key={service.id} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+                      <div>
+                        <p className="text-sm font-medium text-gray-900">{service.name}</p>
+                        <p className="text-xs text-gray-500">{service.category}</p>
+                      </div>
+                      <div className="text-right">
+                        <Checkbox 
+                          checked={doctorForm.services.includes(service.id)}
+                          onCheckedChange={() => handleServiceToggle(service.id)}
+                        />
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
           </div>
 
           <Separator />
@@ -981,10 +1102,13 @@ function DoctorFormDialog({
             <Button variant="outline" onClick={() => onOpenChange(false)} disabled={isSubmitting}>
               Cancel
             </Button>
-            <Button 
-              className="bg-[rgb(203,255,143)] hover:bg-[#AEEF5A] text-white"
+            <Button
+              className={`${(isSubmitting || (isEdit && canSubmit))
+                ? 'bg-[#8AC92F] hover:bg-[#8AC92F] disabled:bg-[#8AC92F] disabled:opacity-100'
+                : 'bg-[rgb(203,255,143)] hover:bg-[rgb(203,255,143)] disabled:bg-[rgb(203,255,143)] disabled:opacity-80'
+              } text-white disabled:text-white disabled:cursor-not-allowed`}
               onClick={onSubmit}
-              disabled={isSubmitting}
+              disabled={isSubmitting || !canSubmit}
             >
               {isSubmitting ? (isEdit ? 'Updating Doctor...' : 'Adding Doctor...') : (isEdit ? 'Update Doctor' : 'Add Doctor')}
             </Button>

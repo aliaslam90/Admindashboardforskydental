@@ -1,0 +1,30 @@
+.DS_Store
+Thumbs.db
+
+# Dependencies & build outputs
+**/node_modules/
+**/dist/
+**/build/
+**/.turbo/
+**/.cache/
+**/*.tsbuildinfo
+
+# Logs
+*.log
+**/logs/
+
+# Environment files
+.env
+.env.*
+
+# Editor settings
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# Coverage / test output
+**/coverage/
+**/.nyc_output/
+

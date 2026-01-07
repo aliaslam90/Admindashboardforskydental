@@ -1,4 +1,4 @@
-import { useState, useMemo, useRef, useEffect } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { Plus, Search, Filter, MoreVertical, Calendar as CalendarIcon, Edit, Ban, CheckCircle2, Clock } from 'lucide-react';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
@@ -10,16 +10,23 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSepara
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '../components/ui/dialog';
 import { StatusBadge } from '../components/StatusBadge';
 import { AppointmentDrawer } from '../components/AppointmentDrawer';
-import { mockAppointments, mockDoctors, mockServices, Appointment, AppointmentStatus } from '../data/mockData';
+import { Appointment, AppointmentStatus, Doctor, Service } from '../data/mockData';
+import { appointmentsApi } from '../services/appointmentsApi';
+import { cancelAppointmentFlow, rescheduleAppointmentFlow, updateStatusFlow } from './appointmentActions';
+import { doctorsApi } from '../services/doctorsApi';
 import { toast } from 'sonner';
+import { CreateAppointmentPrefill } from '../components/CreateAppointmentModal';
 
 interface AppointmentsProps {
-  onCreateAppointment: () => void;
+  onCreateAppointment: (prefill?: CreateAppointmentPrefill) => void;
   selectedAppointmentId?: string;
+  refreshKey?: number;
 }
 
-export function Appointments({ onCreateAppointment, selectedAppointmentId }: AppointmentsProps) {
-  const [appointments, setAppointments] = useState<Appointment[]>(mockAppointments);
+export function Appointments({ onCreateAppointment, selectedAppointmentId, refreshKey = 0 }: AppointmentsProps) {
+  const [appointments, setAppointments] = useState<Appointment[]>([]);
+  const [doctorOptions, setDoctorOptions] = useState<Doctor[]>([]);
+  const [serviceOptions, setServiceOptions] = useState<Service[]>([]);
   const [selectedAppointment, setSelectedAppointment] = useState<Appointment | null>(null);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [rescheduleOpen, setRescheduleOpen] = useState(false);
@@ -28,6 +35,25 @@ export function Appointments({ onCreateAppointment, selectedAppointmentId }: App
     date: '',
     time: ''
   });
+  const [isLoading, setIsLoading] = useState(false);
+  const [isRescheduling, setIsRescheduling] = useState(false);
+  const openNativePicker = (e: React.FocusEvent<HTMLInputElement> | React.MouseEvent<HTMLInputElement>) => {
+    // Improves UX on browsers that support showPicker (e.g., Chrome)
+    const input = e.currentTarget;
+    if (typeof input.showPicker === 'function') {
+      input.showPicker();
+    }
+  };
+
+  const toDateValue = (value: string) => (value ? new Date(value).getTime() : null);
+  const formatTime = (value: string) => {
+    const [h, m] = value.split(':').map(Number);
+    if (Number.isNaN(h) || Number.isNaN(m)) return value;
+    const suffix = h >= 12 ? 'PM' : 'AM';
+    const hour = h % 12 || 12;
+    return `${hour}:${m.toString().padStart(2, '0')} ${suffix}`;
+  };
+
   
   // Filters
   const [searchQuery, setSearchQuery] = useState('');
@@ -36,6 +62,41 @@ export function Appointments({ onCreateAppointment, selectedAppointmentId }: App
   const [filterStatus, setFilterStatus] = useState<string>('all');
   const [dateFrom, setDateFrom] = useState('');
   const [dateTo, setDateTo] = useState('');
+
+  // Load appointments from backend
+  useEffect(() => {
+    const fetchAppointments = async () => {
+      setIsLoading(true);
+      try {
+        const data = await appointmentsApi.getAll();
+        setAppointments(data);
+      } catch (error) {
+        console.error('Failed to load appointments', error);
+        toast.error('Failed to load appointments');
+      } finally {
+        setIsLoading(false);
+      }
+    };
+    fetchAppointments();
+  }, [refreshKey]);
+
+  // Load doctors and services for filters
+  useEffect(() => {
+    const fetchFilterOptions = async () => {
+      try {
+        const [doctors, services] = await Promise.all([
+          doctorsApi.getAll(),
+          doctorsApi.getServices(),
+        ]);
+        setDoctorOptions(doctors);
+        setServiceOptions(services);
+      } catch (error) {
+        console.error('Failed to load doctors/services', error);
+        toast.error('Failed to load doctors/services');
+      }
+    };
+    fetchFilterOptions();
+  }, []);
 
   // Open drawer for selected appointment
   useEffect(() => {
@@ -79,10 +140,14 @@ export function Appointments({ onCreateAppointment, selectedAppointmentId }: App
       }
 
       // Date range filter
-      if (dateFrom && apt.date < dateFrom) {
+      const aptDateValue = toDateValue(apt.date);
+      const fromValue = toDateValue(dateFrom);
+      const toValue = toDateValue(dateTo);
+
+      if (fromValue !== null && aptDateValue !== null && aptDateValue < fromValue) {
         return false;
       }
-      if (dateTo && apt.date > dateTo) {
+      if (toValue !== null && aptDateValue !== null && aptDateValue > toValue) {
         return false;
       }
 
@@ -114,16 +179,31 @@ export function Appointments({ onCreateAppointment, selectedAppointmentId }: App
     );
   };
 
-  const handleConfirm = (id: string) => {
-    updateAppointmentStatus(id, 'confirmed');
+  const handleConfirm = async (id: string) => {
+    await updateStatusFlow({
+      appointmentId: id,
+      newStatus: 'confirmed',
+      appointments,
+      setAppointments,
+    });
   };
 
-  const handleCheckIn = (id: string) => {
-    updateAppointmentStatus(id, 'checked-in');
+  const handleCheckIn = async (id: string) => {
+    await updateStatusFlow({
+      appointmentId: id,
+      newStatus: 'checked-in',
+      appointments,
+      setAppointments,
+    });
   };
 
-  const handleComplete = (id: string) => {
-    updateAppointmentStatus(id, 'completed');
+  const handleComplete = async (id: string) => {
+    await updateStatusFlow({
+      appointmentId: id,
+      newStatus: 'completed',
+      appointments,
+      setAppointments,
+    });
   };
 
   const handleReschedule = (id: string) => {
@@ -131,33 +211,30 @@ export function Appointments({ onCreateAppointment, selectedAppointmentId }: App
     setRescheduleOpen(true);
   };
 
-  const handleSaveReschedule = () => {
-    if (!rescheduleForm.date || !rescheduleForm.time) {
-      toast.error('Please select both date and time');
-      return;
-    }
-
-    setAppointments(prev => 
-      prev.map(apt => 
-        apt.id === rescheduleAppointmentId 
-          ? { ...apt, date: rescheduleForm.date, time: rescheduleForm.time, updatedAt: new Date().toISOString() }
-          : apt
-      )
-    );
-
-    toast.success('Appointment rescheduled successfully');
-    setRescheduleOpen(false);
-    setRescheduleAppointmentId(null);
-    setRescheduleForm({ date: '', time: '' });
+  const handleSaveReschedule = async () => {
+    await rescheduleAppointmentFlow({
+      appointmentId: rescheduleAppointmentId,
+      appointments,
+      serviceOptions,
+      rescheduleForm,
+      setAppointments,
+      setRescheduleOpen,
+      setRescheduleAppointmentId,
+      setRescheduleForm,
+      setIsRescheduling,
+    });
   };
 
   const handleNoShow = (id: string) => {
     updateAppointmentStatus(id, 'no-show');
   };
 
-  const handleCancel = (id: string) => {
-    // This would open a cancel modal
-    toast.info('Cancel confirmation modal would open here');
+  const handleCancel = async (id: string) => {
+    await cancelAppointmentFlow({
+      appointmentId: id,
+      appointments,
+      setAppointments,
+    });
   };
 
   const handleQuickAction = (appointment: Appointment, action: string) => {
@@ -183,7 +260,7 @@ export function Appointments({ onCreateAppointment, selectedAppointmentId }: App
           <h1 className="text-2xl font-semibold text-gray-900">Appointments</h1>
           <p className="text-sm text-gray-500 mt-1">Manage and track all appointments</p>
         </div>
-        <Button onClick={onCreateAppointment}>
+        <Button onClick={() => onCreateAppointment()}>
           <Plus className="h-4 w-4 mr-2" />
           New Appointment
         </Button>
@@ -218,6 +295,8 @@ export function Appointments({ onCreateAppointment, selectedAppointmentId }: App
                 type="date"
                 value={dateFrom}
                 onChange={(e) => setDateFrom(e.target.value)}
+                onClick={openNativePicker}
+                onFocus={openNativePicker}
                 placeholder="From date"
               />
             </div>
@@ -228,6 +307,8 @@ export function Appointments({ onCreateAppointment, selectedAppointmentId }: App
                 type="date"
                 value={dateTo}
                 onChange={(e) => setDateTo(e.target.value)}
+                onClick={openNativePicker}
+                onFocus={openNativePicker}
                 placeholder="To date"
               />
             </div>
@@ -258,7 +339,7 @@ export function Appointments({ onCreateAppointment, selectedAppointmentId }: App
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">All Doctors</SelectItem>
-                  {mockDoctors.map(doctor => (
+                  {doctorOptions.map(doctor => (
                     <SelectItem key={doctor.id} value={doctor.id}>
                       {doctor.name}
                     </SelectItem>
@@ -275,7 +356,7 @@ export function Appointments({ onCreateAppointment, selectedAppointmentId }: App
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">All Services</SelectItem>
-                  {mockServices.map(service => (
+                  {serviceOptions.map(service => (
                     <SelectItem key={service.id} value={service.id}>
                       {service.name}
                     </SelectItem>
@@ -316,7 +397,11 @@ export function Appointments({ onCreateAppointment, selectedAppointmentId }: App
           </div>
         </CardHeader>
         <CardContent>
-          {sortedAppointments.length === 0 ? (
+          {isLoading ? (
+            <div className="py-12 text-center text-sm text-gray-500">
+              Loading appointments...
+            </div>
+          ) : sortedAppointments.length === 0 ? (
             <div className="text-center py-12">
               <CalendarIcon className="h-12 w-12 text-gray-300 mx-auto mb-4" />
               <p className="text-sm text-gray-500">No appointments found</p>
@@ -325,7 +410,7 @@ export function Appointments({ onCreateAppointment, selectedAppointmentId }: App
                 variant="outline" 
                 size="sm" 
                 className="mt-4"
-                onClick={onCreateAppointment}
+                onClick={() => onCreateAppointment()}
               >
                 Create Appointment
               </Button>
@@ -369,40 +454,42 @@ export function Appointments({ onCreateAppointment, selectedAppointmentId }: App
                               year: 'numeric'
                             })}
                           </p>
-                          <p className="text-xs text-gray-500">{appointment.time}</p>
+                          <p className="text-xs text-gray-500">{formatTime(appointment.time)}</p>
                         </div>
                       </TableCell>
                       <TableCell>
                         <StatusBadge status={appointment.status} />
                       </TableCell>
                       <TableCell>
-                        <DropdownMenu>
-                          <DropdownMenuTrigger asChild onClick={(e) => e.stopPropagation()}>
-                            <Button variant="ghost" size="sm">
-                              <MoreVertical className="h-4 w-4" />
-                            </Button>
-                          </DropdownMenuTrigger>
-                          <DropdownMenuContent align="end">
-                            {appointment.status === 'booked' && (
-                              <>
+                        {(appointment.status !== 'completed' && appointment.status !== 'cancelled') && (
+                          <DropdownMenu>
+                            <DropdownMenuTrigger asChild onClick={(e) => e.stopPropagation()}>
+                              <Button variant="ghost" size="sm">
+                                <MoreVertical className="h-4 w-4" />
+                              </Button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="end">
+                              {appointment.status === 'booked' && (
+                                <>
+                                  <DropdownMenuItem onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleQuickAction(appointment, 'confirm');
+                                  }}>
+                                    <CheckCircle2 className="h-4 w-4 mr-2" />
+                                    Confirm
+                                  </DropdownMenuItem>
+                                  <DropdownMenuSeparator />
+                                </>
+                              )}
+                              {(appointment.status === 'booked' || appointment.status === 'confirmed') && (
                                 <DropdownMenuItem onClick={(e) => {
                                   e.stopPropagation();
-                                  handleQuickAction(appointment, 'confirm');
+                                  handleQuickAction(appointment, 'reschedule');
                                 }}>
-                                  <CheckCircle2 className="h-4 w-4 mr-2" />
-                                  Confirm
+                                  <Edit className="h-4 w-4 mr-2" />
+                                  Reschedule
                                 </DropdownMenuItem>
-                                <DropdownMenuSeparator />
-                              </>
-                            )}
-                            <DropdownMenuItem onClick={(e) => {
-                              e.stopPropagation();
-                              handleQuickAction(appointment, 'reschedule');
-                            }}>
-                              <Edit className="h-4 w-4 mr-2" />
-                              Reschedule
-                            </DropdownMenuItem>
-                            {appointment.status !== 'completed' && appointment.status !== 'cancelled' && (
+                              )}
                               <DropdownMenuItem 
                                 onClick={(e) => {
                                   e.stopPropagation();
@@ -413,9 +500,9 @@ export function Appointments({ onCreateAppointment, selectedAppointmentId }: App
                                 <Ban className="h-4 w-4 mr-2" />
                                 Cancel
                               </DropdownMenuItem>
-                            )}
-                          </DropdownMenuContent>
-                        </DropdownMenu>
+                            </DropdownMenuContent>
+                          </DropdownMenu>
+                        )}
                       </TableCell>
                     </TableRow>
                   ))}
@@ -460,6 +547,7 @@ export function Appointments({ onCreateAppointment, selectedAppointmentId }: App
                   type="date"
                   value={rescheduleForm.date}
                   onChange={(e) => setRescheduleForm({ ...rescheduleForm, date: e.target.value })}
+                  min={new Date().toISOString().split("T")[0]}
                   className="pr-10"
                 />
                 <CalendarIcon className="absolute right-3 top-1/2 -translate-y-1/2 h-5 w-5 text-blue-600 pointer-events-none" />
@@ -490,8 +578,9 @@ export function Appointments({ onCreateAppointment, selectedAppointmentId }: App
             <Button
               type="button"
               onClick={handleSaveReschedule}
+              disabled={isRescheduling}
             >
-              Reschedule
+              {isRescheduling ? 'Rescheduling...' : 'Reschedule'}
             </Button>
           </DialogFooter>
         </DialogContent>
