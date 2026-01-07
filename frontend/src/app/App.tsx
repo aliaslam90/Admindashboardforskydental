@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { Toaster } from "./components/ui/sonner";
-import { DataProvider } from "./contexts/DataContext";
+import { SyncProvider } from "./contexts/SyncContext";
+import { NotificationsProvider } from "./contexts/NotificationsContext";
 import { SyncIndicator } from "./components/SyncIndicator";
 import { DashboardLayout } from "./components/DashboardLayout";
 import { DoctorLayout } from "./components/DoctorLayout";
@@ -19,9 +20,10 @@ import { DoctorAppointments } from "./pages/doctor/DoctorAppointments";
 import { DoctorCalendarView } from "./pages/doctor/DoctorCalendarView";
 import { DoctorPatients } from "./pages/doctor/DoctorPatients";
 import { DoctorProfile } from "./pages/doctor/DoctorProfile";
-import { Admin, Doctor, Service } from "./data/mockData";
+import { Admin, Doctor } from "./data/mockData";
 import { toast } from "sonner";
 import { doctorsApi } from "./services/doctorsApi";
+import { servicesApi, Service } from "./services/servicesApi";
 import {
   CreateAppointmentModal,
   CreateAppointmentPrefill,
@@ -113,7 +115,7 @@ function AppContent() {
       try {
         const [doctors, services] = await Promise.all([
           doctorsApi.getAll(),
-          doctorsApi.getServices(),
+          servicesApi.getAll(),
         ]);
         setDoctorOptions(doctors);
         setServiceOptions(services);
@@ -345,22 +347,24 @@ function AppContent() {
         </DoctorLayout>
       )}
 
-      <CreateAppointmentModal
-        open={createAppointmentOpen}
-        onOpenChange={(open) => {
-          if (!open) {
-            setCreateAppointmentInitial(null);
-          }
-          setCreateAppointmentOpen(open);
-        }}
-        initialValues={createAppointmentInitial ?? undefined}
-        doctorOptions={doctorOptions}
-        serviceOptions={serviceOptions}
-        onCreated={() => {
-          setCurrentPage("appointments");
-          setAppointmentsRefreshKey((v) => v + 1);
-        }}
-      />
+      {authPage === "admin-dashboard" && (
+        <CreateAppointmentModal
+          open={createAppointmentOpen}
+          onOpenChange={(open) => {
+            if (!open) {
+              setCreateAppointmentInitial(null);
+            }
+            setCreateAppointmentOpen(open);
+          }}
+          initialValues={createAppointmentInitial ?? undefined}
+          doctorOptions={doctorOptions}
+          serviceOptions={serviceOptions}
+          onCreated={() => {
+            setCurrentPage("appointments");
+            setAppointmentsRefreshKey((v) => v + 1);
+          }}
+        />
+      )}
 
       <SyncIndicator />
       <Toaster position="top-right" />
@@ -370,8 +374,10 @@ function AppContent() {
 
 export default function App() {
   return (
-    <DataProvider>
-      <AppContent />
-    </DataProvider>
+    <SyncProvider>
+      <NotificationsProvider>
+        <AppContent />
+      </NotificationsProvider>
+    </SyncProvider>
   );
 }

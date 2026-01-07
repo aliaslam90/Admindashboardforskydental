@@ -9,8 +9,7 @@ import { Input } from '../components/ui/input';
 import { Label } from '../components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../components/ui/select';
 import { Switch } from '../components/ui/switch';
-import { Service } from '../data/mockData';
-import { doctorsApi } from '../services/doctorsApi';
+import { Service, servicesApi } from '../services/servicesApi';
 import { LoadingSpinner } from '../components/LoadingSpinner';
 import { toast } from 'sonner';
 
@@ -29,7 +28,7 @@ export function Services() {
   const fetchServices = async () => {
     setLoading(true);
     try {
-      const data = await doctorsApi.getServices();
+      const data = await servicesApi.getAll();
       setServices(data);
     } catch (error) {
       console.error('Failed to load services', error);
@@ -83,10 +82,10 @@ export function Services() {
 
     const action = async () => {
       if (exists) {
-        await doctorsApi.updateService(editingService.id, payload);
+        await servicesApi.update(editingService.id, payload);
         toast.success('Service updated successfully');
       } else {
-        await doctorsApi.createService(payload);
+        await servicesApi.create(payload);
         toast.success('Service created successfully');
       }
     };
@@ -106,7 +105,7 @@ export function Services() {
   const handleDelete = () => {
     if (!serviceToDelete) return;
 
-    doctorsApi.deleteService(serviceToDelete.id)
+    servicesApi.delete(serviceToDelete.id)
       .then(() => {
         toast.success('Service deleted successfully');
         fetchServices();
@@ -121,7 +120,7 @@ export function Services() {
 
   const handleToggleActive = (service: Service) => {
     const next = { ...service, active: !service.active };
-    doctorsApi.updateService(service.id, {
+    servicesApi.update(service.id, {
       active_status: next.active,
     })
       .then(() => {

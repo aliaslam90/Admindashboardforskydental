@@ -20,7 +20,8 @@ import {
 import { Textarea } from "./ui/textarea";
 import { toast } from "sonner";
 import { appointmentsApi } from "../services/appointmentsApi";
-import { Doctor, Service } from "../data/mockData";
+import { Doctor } from "../data/mockData";
+import { Service } from "../services/servicesApi";
 
 export type CreateAppointmentForm = {
   patientName: string;

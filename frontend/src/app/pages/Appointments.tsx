@@ -10,12 +10,13 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSepara
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '../components/ui/dialog';
 import { StatusBadge } from '../components/StatusBadge';
 import { AppointmentDrawer } from '../components/AppointmentDrawer';
-import { Appointment, AppointmentStatus, Doctor, Service } from '../data/mockData';
+import { Appointment, AppointmentStatus, Doctor } from '../data/mockData';
 import { appointmentsApi } from '../services/appointmentsApi';
 import { cancelAppointmentFlow, rescheduleAppointmentFlow, updateStatusFlow } from './appointmentActions';
 import { doctorsApi } from '../services/doctorsApi';
 import { toast } from 'sonner';
 import { CreateAppointmentPrefill } from '../components/CreateAppointmentModal';
+import { servicesApi, Service } from '../services/servicesApi';
 
 interface AppointmentsProps {
   onCreateAppointment: (prefill?: CreateAppointmentPrefill) => void;
@@ -86,7 +87,7 @@ export function Appointments({ onCreateAppointment, selectedAppointmentId, refre
       try {
         const [doctors, services] = await Promise.all([
           doctorsApi.getAll(),
-          doctorsApi.getServices(),
+          servicesApi.getAll(),
         ]);
         setDoctorOptions(doctors);
         setServiceOptions(services);
