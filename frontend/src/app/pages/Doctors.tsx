@@ -12,7 +12,7 @@ import { Label } from '../components/ui/label';
 import { Checkbox } from '../components/ui/checkbox';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../components/ui/select';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../components/ui/tabs';
-import { Doctor, BlockedLeave, Appointment } from '../data/mockData';
+import { Doctor, BlockedLeave, Appointment } from '../data/types';
 import { toast } from 'sonner';
 import { doctorsApi } from '../services/doctorsApi';
 import { appointmentsApi } from '../services/appointmentsApi';
@@ -288,6 +288,7 @@ export function Doctors() {
         specialization: doctorForm.specialization,
         services: doctorForm.services,
         availability: doctorForm.availability,
+        status: selectedDoctor.status, // Preserve current status
       });
       setDoctors((prev) => prev.map((d) => (d.id === selectedDoctor.id ? updated : d)));
       setSelectedDoctor(updated);

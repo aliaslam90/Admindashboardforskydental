@@ -327,7 +327,7 @@ Doctor completes appointment
 - Local state for UI
 
 ### Mock Data
-- Comprehensive mock data in `/src/app/data/mockData.ts`
+- Type definitions and data models in `/src/app/data/types.ts`
 - Ready to replace with API calls
 
 ---

@@ -600,7 +600,7 @@ function AppointmentsPage() {
 ## Testing
 
 ### Mock Data
-Development uses mock data from `/src/app/data/mockData.ts`
+Development uses type definitions from `/src/app/data/types.ts`
 
 ### API Integration Checklist
 - [ ] Replace mock data with API calls

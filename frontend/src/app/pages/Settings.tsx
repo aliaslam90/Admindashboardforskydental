@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Settings as SettingsIcon, Clock, Calendar, Shield, Link2, User, LogOut, Plus, Trash2, Edit, AlertTriangle } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../components/ui/card';
 import { Button } from '../components/ui/button';
@@ -11,8 +11,9 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, Di
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '../components/ui/alert-dialog';
 import { Badge } from '../components/ui/badge';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../components/ui/table';
-import { Admin, AdminRole } from '../data/mockData';
+import { Admin, AdminRole } from '../data/types';
 import { toast } from 'sonner';
+import { settingsApi, AppointmentSettings } from '../services/settingsApi';
 
 interface SettingsProps {
   currentAdmin?: Admin;
@@ -41,8 +42,12 @@ export function Settings({ currentAdmin, onLogout }: SettingsProps) {
     lastLogin: new Date().toISOString(),
     createdAt: new Date().toISOString()
   };
+  const [appointmentSettings, setAppointmentSettings] = useState<AppointmentSettings | null>(null);
+  const [isLoadingSettings, setIsLoadingSettings] = useState(true);
   const [bufferTime, setBufferTime] = useState('15');
   const [cancellationWindow, setCancellationWindow] = useState('24');
+  const [otpRequired, setOtpRequired] = useState(false);
+  const [otpExpiry, setOtpExpiry] = useState('5');
   const [calendarConnected, setCalendarConnected] = useState(true);
   const [confirmDialog, setConfirmDialog] = useState<{open: boolean; type: string} | null>(null);
   const [logoutDialogOpen, setLogoutDialogOpen] = useState(false);
@@ -61,8 +66,79 @@ export function Settings({ currentAdmin, onLogout }: SettingsProps) {
     role: 'appointment-manager' as AdminRole
   });
 
-  const handleSaveBufferTime = () => {
-    setConfirmDialog({ open: true, type: 'buffer' });
+  // Fetch appointment settings on mount
+  useEffect(() => {
+    const loadSettings = async () => {
+      try {
+        setIsLoadingSettings(true);
+        const settings = await settingsApi.getAppointmentSettings();
+        setAppointmentSettings(settings);
+        setBufferTime(settings.buffer_minutes.toString());
+        setCancellationWindow(settings.cancellation_window_hours.toString());
+        setOtpRequired(settings.otp_required);
+        setOtpExpiry(settings.otp_expiry_minutes.toString());
+      } catch (error) {
+        console.error('Failed to load appointment settings', error);
+        toast.error('Failed to load appointment settings');
+      } finally {
+        setIsLoadingSettings(false);
+      }
+    };
+    loadSettings();
+  }, []);
+
+  const handleSaveBufferTime = async () => {
+    try {
+      setIsSubmitting(true);
+      const updated = await settingsApi.updateAppointmentSettings({
+        buffer_minutes: parseInt(bufferTime, 10),
+      });
+      setAppointmentSettings(updated);
+      toast.success('Buffer time updated', {
+        description: 'Changes will affect future appointments only'
+      });
+      setConfirmDialog(null);
+    } catch (error) {
+      console.error('Failed to update buffer time', error);
+      toast.error(error instanceof Error ? error.message : 'Failed to update buffer time');
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const handleSaveCancellationWindow = async () => {
+    try {
+      setIsSubmitting(true);
+      const updated = await settingsApi.updateAppointmentSettings({
+        cancellation_window_hours: parseInt(cancellationWindow, 10),
+      });
+      setAppointmentSettings(updated);
+      toast.success('Cancellation window updated');
+      setConfirmDialog(null);
+    } catch (error) {
+      console.error('Failed to update cancellation window', error);
+      toast.error(error instanceof Error ? error.message : 'Failed to update cancellation window');
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const handleSaveOtpSettings = async () => {
+    try {
+      setIsSubmitting(true);
+      const updated = await settingsApi.updateAppointmentSettings({
+        otp_required: otpRequired,
+        otp_expiry_minutes: parseInt(otpExpiry, 10),
+      });
+      setAppointmentSettings(updated);
+      toast.success('OTP settings updated');
+      setConfirmDialog(null);
+    } catch (error) {
+      console.error('Failed to update OTP settings', error);
+      toast.error(error instanceof Error ? error.message : 'Failed to update OTP settings');
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   const handleDisconnectCalendar = () => {
@@ -71,16 +147,18 @@ export function Settings({ currentAdmin, onLogout }: SettingsProps) {
 
   const handleConfirm = () => {
     if (confirmDialog?.type === 'buffer') {
-      toast.success('Buffer time updated', {
-        description: 'Changes will affect future appointments only'
-      });
+      handleSaveBufferTime();
+    } else if (confirmDialog?.type === 'cancellation') {
+      handleSaveCancellationWindow();
+    } else if (confirmDialog?.type === 'otp') {
+      handleSaveOtpSettings();
     } else if (confirmDialog?.type === 'calendar') {
       setCalendarConnected(false);
       toast.success('Calendar disconnected', {
         description: 'New appointments will no longer sync'
       });
+      setConfirmDialog(null);
     }
-    setConfirmDialog(null);
   };
 
   const handleLogout = () => {
@@ -390,7 +468,11 @@ export function Settings({ currentAdmin, onLogout }: SettingsProps) {
                 <SelectItem value="30">30 minutes</SelectItem>
               </SelectContent>
             </Select>
-            <Button onClick={handleSaveBufferTime} variant="outline">
+            <Button 
+              onClick={() => setConfirmDialog({ open: true, type: 'buffer' })} 
+              variant="outline"
+              disabled={isSubmitting || isLoadingSettings}
+            >
               Update Buffer Time
             </Button>
           </div>
@@ -403,7 +485,11 @@ export function Settings({ currentAdmin, onLogout }: SettingsProps) {
             <p className="text-sm text-gray-500">
               Minimum notice required for appointment cancellation
             </p>
-            <Select value={cancellationWindow} onValueChange={setCancellationWindow}>
+            <Select 
+              value={cancellationWindow} 
+              onValueChange={setCancellationWindow}
+              disabled={isLoadingSettings}
+            >
               <SelectTrigger id="cancel-window">
                 <SelectValue />
               </SelectTrigger>
@@ -416,7 +502,11 @@ export function Settings({ currentAdmin, onLogout }: SettingsProps) {
                 <SelectItem value="48">48 hours</SelectItem>
               </SelectContent>
             </Select>
-            <Button variant="outline">
+            <Button 
+              onClick={() => setConfirmDialog({ open: true, type: 'cancellation' })} 
+              variant="outline"
+              disabled={isSubmitting || isLoadingSettings}
+            >
               Update Cancellation Window
             </Button>
           </div>
@@ -432,13 +522,21 @@ export function Settings({ currentAdmin, onLogout }: SettingsProps) {
                   Require OTP verification before booking
                 </p>
               </div>
-              <Switch defaultChecked />
+              <Switch 
+                checked={otpRequired} 
+                onCheckedChange={setOtpRequired}
+                disabled={isLoadingSettings}
+              />
             </div>
           </div>
 
           <div className="space-y-3">
             <Label htmlFor="otp-expiry">OTP Expiry Time (minutes)</Label>
-            <Select defaultValue="5">
+            <Select 
+              value={otpExpiry} 
+              onValueChange={setOtpExpiry}
+              disabled={isLoadingSettings}
+            >
               <SelectTrigger id="otp-expiry">
                 <SelectValue />
               </SelectTrigger>
@@ -448,6 +546,13 @@ export function Settings({ currentAdmin, onLogout }: SettingsProps) {
                 <SelectItem value="10">10 minutes</SelectItem>
               </SelectContent>
             </Select>
+            <Button 
+              onClick={() => setConfirmDialog({ open: true, type: 'otp' })} 
+              variant="outline"
+              disabled={isSubmitting || isLoadingSettings}
+            >
+              Update OTP Settings
+            </Button>
           </div>
         </CardContent>
       </Card>
@@ -570,17 +675,31 @@ export function Settings({ currentAdmin, onLogout }: SettingsProps) {
               {confirmDialog?.type === 'buffer' && 
                 'Changing buffer time affects future appointments only. Existing appointments will not be modified.'
               }
+              {confirmDialog?.type === 'cancellation' && 
+                'Changing cancellation window affects future appointments only. Existing appointments will not be modified.'
+              }
+              {confirmDialog?.type === 'otp' && 
+                'Changing OTP settings affects future appointments only. Existing appointments will not be modified.'
+              }
               {confirmDialog?.type === 'calendar' && 
                 'This will stop syncing new appointments with your calendar. Are you sure?'
               }
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setConfirmDialog(null)}>
+            <Button 
+              variant="outline" 
+              onClick={() => setConfirmDialog(null)}
+              disabled={isSubmitting}
+            >
               Cancel
             </Button>
-            <Button onClick={handleConfirm} className="bg-[rgb(203,255,143)] hover:bg-[#AEEF5A]">
-              Confirm
+            <Button 
+              onClick={handleConfirm} 
+              className="bg-[rgb(203,255,143)] hover:bg-[#AEEF5A]"
+              disabled={isSubmitting}
+            >
+              {isSubmitting ? 'Saving...' : 'Confirm'}
             </Button>
           </DialogFooter>
         </DialogContent>

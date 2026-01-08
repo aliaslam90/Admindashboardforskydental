@@ -26,7 +26,7 @@ A fully functional, production-ready admin dashboard for managing appointments, 
   - `LoadingSpinner.tsx` - Loading indicator
 
 ### 📊 Data Layer
-- **Mock Data**: `/src/app/data/mockData.ts`
+- **Type Definitions**: `/src/app/data/types.ts`
   - 5 Patients with visit history
   - 3 Doctors with specializations and availability
   - 8 Services across categories
@@ -248,7 +248,7 @@ src/
 │   │   ├── Notifications.tsx      # Notification logs
 │   │   └── Settings.tsx           # System settings
 │   └── data/
-│       └── mockData.ts            # Mock data & types
+│       └── types.ts                # Type definitions & data models
 └── styles/
     ├── theme.css                  # Design system tokens
     ├── tailwind.css               # Tailwind config

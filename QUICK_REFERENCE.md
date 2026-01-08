@@ -389,10 +389,10 @@ The dashboard will be available at `http://localhost:5173`
 4. Review component documentation
 
 ### Mock Data Location
-`/src/app/data/mockData.ts`
+`/src/app/data/types.ts`
 
 ### Modify Mock Data
-1. Open mockData.ts
+1. Open types.ts
 2. Edit arrays (patients, doctors, services, appointments)
 3. Save file
 4. Refresh browser

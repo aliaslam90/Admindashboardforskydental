@@ -1,5 +1,5 @@
 import { apiClient } from './api';
-import { Appointment, AppointmentStatus } from '../data/mockData';
+import { Appointment, AppointmentStatus } from '../data/types';
 
 // Backend types
 export type BackendAppointmentStatus =
@@ -141,6 +141,65 @@ function transformBackendToFrontend(
 }
 
 class AppointmentsApi {
+  async getAvailability(params: {
+    doctorId: string;
+    serviceId: string;
+    from?: string;
+    days?: number;
+  }): Promise<
+    {
+      start: string;
+      end: string;
+      date: string;
+      time: string;
+    }[]
+  > {
+    const query: Record<string, string> = {
+      doctorId: params.doctorId,
+      serviceId: params.serviceId,
+    };
+    if (params.from) query.from = params.from;
+    if (params.days) query.days = String(params.days);
+
+    const slots = await apiClient.get<
+      {
+        start: string;
+        end: string;
+      }[]
+    >('/appointments/availability', query);
+
+    return slots.map((slot) => {
+      // Parse the ISO string - extract date and time directly from ISO string
+      // to avoid timezone conversion issues
+      const isoMatch = slot.start.match(/^(\d{4}-\d{2}-\d{2})T(\d{2}:\d{2}):/);
+      if (isoMatch) {
+        const datePart = isoMatch[1];
+        const timePart = isoMatch[2];
+        return {
+          start: slot.start,
+          end: slot.end,
+          date: datePart,
+          time: timePart,
+        };
+      }
+      // Fallback to Date parsing if format is unexpected
+      const slotDate = new Date(slot.start);
+      const year = slotDate.getUTCFullYear();
+      const month = String(slotDate.getUTCMonth() + 1).padStart(2, '0');
+      const day = String(slotDate.getUTCDate()).padStart(2, '0');
+      const datePart = `${year}-${month}-${day}`;
+      const hours = String(slotDate.getUTCHours()).padStart(2, '0');
+      const minutes = String(slotDate.getUTCMinutes()).padStart(2, '0');
+      const timePart = `${hours}:${minutes}`;
+      return {
+        start: slot.start,
+        end: slot.end,
+        date: datePart,
+        time: timePart,
+      };
+    });
+  }
+
   async getAll(filters?: AppointmentFilters): Promise<Appointment[]> {
     const params: Record<string, string> = {};
 

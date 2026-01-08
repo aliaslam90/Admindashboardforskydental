@@ -16,7 +16,7 @@ import image_6ed9d1dbe20e8b3479eed332bf1c51ffbc9e9f7c from '../../assets/6ed9d1d
 import { cn } from './ui/utils';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from './ui/dropdown-menu';
 import { NotificationCenter } from './NotificationCenter';
-import { Admin } from '../data/mockData';
+import { Admin } from '../data/types';
 import { ImageWithFallback } from './figma/ImageWithFallback';
 
 interface DashboardLayoutProps {

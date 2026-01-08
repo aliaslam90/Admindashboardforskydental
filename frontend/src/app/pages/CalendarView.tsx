@@ -3,7 +3,7 @@ import { ChevronLeft, ChevronRight, Plus } from 'lucide-react';
 import { Button } from '../components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../components/ui/select';
-import { Appointment, AppointmentStatus, Doctor } from '../data/mockData';
+import { Appointment, AppointmentStatus, Doctor } from '../data/types';
 import { appointmentsApi } from '../services/appointmentsApi';
 import { doctorsApi } from '../services/doctorsApi';
 import { toast } from 'sonner';

@@ -10,7 +10,7 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSepara
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '../components/ui/dialog';
 import { StatusBadge } from '../components/StatusBadge';
 import { AppointmentDrawer } from '../components/AppointmentDrawer';
-import { Appointment, AppointmentStatus, Doctor } from '../data/mockData';
+import { Appointment, AppointmentStatus, Doctor } from '../data/types';
 import { appointmentsApi } from '../services/appointmentsApi';
 import { cancelAppointmentFlow, rescheduleAppointmentFlow, updateStatusFlow } from './appointmentActions';
 import { doctorsApi } from '../services/doctorsApi';
@@ -282,9 +282,20 @@ export function Appointments({ onCreateAppointment, selectedAppointmentId, refre
               <div className="relative">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
                 <Input
+                  id="appointments-search"
+                  name="appointments-search"
+                  type="search"
+                  autoComplete="new-password"
+                  data-lpignore="true"
+                  data-form-type="search"
                   placeholder="Search by patient name, phone, or ID..."
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
+                  onFocus={(e) => {
+                    // Prevent autofill by briefly making readonly
+                    e.target.setAttribute('readonly', 'readonly');
+                    setTimeout(() => e.target.removeAttribute('readonly'), 0);
+                  }}
                   className="pl-10"
                 />
               </div>
