@@ -20,6 +20,25 @@ import { AppointmentStatus } from './entities/appointment.entity';
 export class AppointmentsController {
   constructor(private readonly appointmentsService: AppointmentsService) {}
 
+  @Get('availability')
+  getAvailability(
+    @Query('doctorId') doctorId?: string,
+    @Query('serviceId') serviceId?: string,
+    @Query('from') from?: string,
+    @Query('days') days?: string,
+  ) {
+    if (!doctorId || !serviceId) {
+      // Using a simple error here; in real usage you might want BadRequestException
+      throw new Error('doctorId and serviceId are required');
+    }
+    return this.appointmentsService.getAvailability({
+      doctorId: parseInt(doctorId, 10),
+      serviceId: parseInt(serviceId, 10),
+      from,
+      days: days ? parseInt(days, 10) : undefined,
+    });
+  }
+
   @Post()
   @HttpCode(HttpStatus.CREATED)
   create(@Body() createAppointmentDto: CreateAppointmentDto) {
