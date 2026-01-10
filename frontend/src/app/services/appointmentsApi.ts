@@ -265,6 +265,10 @@ class AppointmentsApi {
   async delete(id: string): Promise<void> {
     await apiClient.delete(`/appointments/${id}`);
   }
+
+  async autoCancelPastBooked(): Promise<{ cancelled: number }> {
+    return await apiClient.post<{ cancelled: number }>('/appointments/auto-cancel-past', {});
+  }
 }
 
 export const appointmentsApi = new AppointmentsApi();

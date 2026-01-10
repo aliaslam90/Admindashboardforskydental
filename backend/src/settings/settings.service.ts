@@ -23,6 +23,7 @@ export class SettingsService {
         opening_time: '09:00',
         closing_time: '18:00',
         working_days: ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'],
+        calendar_connected: false,
       });
       settings = await this.settingsRepo.save(settings);
     }
@@ -35,6 +36,7 @@ export class SettingsService {
 
   async updateAppointmentSettings(
     dto: UpdateAppointmentSettingsDto,
+    userId?: string,
   ): Promise<AppointmentSettings> {
     const settings = await this.getSingleton();
 
@@ -44,7 +46,10 @@ export class SettingsService {
       }
     }
 
-    Object.assign(settings, dto);
+    Object.assign(settings, {
+      ...dto,
+      updated_by: userId,
+    });
     return this.settingsRepo.save(settings);
   }
 

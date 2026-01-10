@@ -23,6 +23,12 @@ export class Service {
   @Column({ type: 'boolean', default: true, name: 'active_status' })
   active_status: boolean;
 
+  @Column({ type: 'uuid', nullable: true, name: 'created_by' })
+  created_by: string;
+
+  @Column({ type: 'uuid', nullable: true, name: 'updated_by' })
+  updated_by: string;
+
   @CreateDateColumn({ name: 'created_at' })
   created_at: Date;
 

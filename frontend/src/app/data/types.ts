@@ -102,7 +102,7 @@ export interface Notification {
   recipient: string;
 }
 
-export type AdminRole = 'super-admin' | 'appointment-manager';
+export type AdminRole = 'super-admin' | 'appointment-manager' | 'manager' | 'receptionist';
 
 export interface Admin {
   id: string;

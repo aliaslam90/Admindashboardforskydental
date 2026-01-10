@@ -30,7 +30,7 @@ export class DoctorsService {
     private readonly appointmentRepository: Repository<Appointment>,
   ) {}
 
-  async create(createDoctorDto: CreateDoctorDto): Promise<Doctor> {
+  async create(createDoctorDto: CreateDoctorDto, userId: string): Promise<Doctor> {
     try {
       const doctor = this.doctorRepository.create({
         name: createDoctorDto.name,
@@ -38,6 +38,7 @@ export class DoctorsService {
         status: createDoctorDto.status || DoctorStatus.ACTIVE,
         services_offered: createDoctorDto.services_offered || [],
         working_hours: createDoctorDto.working_hours || {},
+        created_by: userId,
       });
 
       const savedDoctor = await this.doctorRepository.save(doctor);
@@ -49,6 +50,7 @@ export class DoctorsService {
             doctor_id: savedDoctor.id,
             leave_date: new Date(leaveDto.leave_date),
             reason: leaveDto.reason,
+            created_by: userId,
           }),
         );
         await this.doctorLeaveRepository.save(leaves);
@@ -87,7 +89,7 @@ export class DoctorsService {
     return doctor;
   }
 
-  async update(id: number, updateDoctorDto: UpdateDoctorDto): Promise<Doctor> {
+  async update(id: number, updateDoctorDto: UpdateDoctorDto, userId: string): Promise<Doctor> {
     const doctor = await this.findOne(id);
 
     // Update doctor fields
@@ -106,6 +108,7 @@ export class DoctorsService {
     if (updateDoctorDto.status !== undefined) {
       doctor.status = updateDoctorDto.status;
     }
+    doctor.updated_by = userId;
 
     try {
       await this.doctorRepository.save(doctor);
@@ -122,6 +125,7 @@ export class DoctorsService {
               doctor_id: id,
               leave_date: new Date(leaveDto.leave_date),
               reason: leaveDto.reason,
+              created_by: userId,
             }),
           );
           await this.doctorLeaveRepository.save(leaves);
@@ -149,13 +153,14 @@ export class DoctorsService {
   }
 
   // Additional method to manage leave dates separately
-  async addLeaveDate(doctorId: number, leaveDto: CreateDoctorLeaveDto): Promise<DoctorLeave> {
+  async addLeaveDate(doctorId: number, leaveDto: CreateDoctorLeaveDto, userId: string): Promise<DoctorLeave> {
     const doctor = await this.findOne(doctorId);
 
     const leave = this.doctorLeaveRepository.create({
       doctor_id: doctorId,
       leave_date: new Date(leaveDto.leave_date),
       reason: leaveDto.reason,
+      created_by: userId,
     });
 
     return await this.doctorLeaveRepository.save(leave);
@@ -172,6 +177,7 @@ export class DoctorsService {
   async updateLeaveDate(
     leaveId: number,
     updateDto: UpdateDoctorLeaveDto,
+    userId: string,
   ): Promise<DoctorLeave> {
     const leave = await this.doctorLeaveRepository.findOne({ where: { id: leaveId } });
     if (!leave) {
@@ -184,6 +190,7 @@ export class DoctorsService {
     if (updateDto.reason !== undefined) {
       leave.reason = updateDto.reason;
     }
+    leave.updated_by = userId;
 
     try {
       return await this.doctorLeaveRepository.save(leave);

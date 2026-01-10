@@ -12,8 +12,13 @@ import { Switch } from '../components/ui/switch';
 import { Service, servicesApi } from '../services/servicesApi';
 import { LoadingSpinner } from '../components/LoadingSpinner';
 import { toast } from 'sonner';
+import { Admin } from '../data/types';
 
-export function Services() {
+interface ServicesProps {
+  currentAdmin?: Admin | null;
+}
+
+export function Services({ currentAdmin }: ServicesProps) {
   const [services, setServices] = useState<Service[]>([]);
   const [editingService, setEditingService] = useState<Service | null>(null);
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -149,10 +154,13 @@ export function Services() {
           <h1 className="text-2xl font-semibold text-gray-900">Services</h1>
           <p className="text-sm text-gray-500 mt-1">Manage services and slot durations</p>
         </div>
-        <Button onClick={handleCreateNew} className="bg-[rgb(203,255,143)] hover:bg-[#AEEF5A]">
-          <Plus className="h-4 w-4 mr-2" />
-          Add Service
-        </Button>
+        {(currentAdmin?.role === 'super-admin' || currentAdmin?.role === 'appointment-manager') && (
+          <Button onClick={handleCreateNew} className="bg-[rgb(203,255,143)] hover:bg-[#AEEF5A]">
+            <Plus className="h-4 w-4 mr-2" />
+            Add Service
+          </Button>
+        )}
+        {/* Note: Manager can edit services but not create new ones */}
       </div>
 
       {loading ? (
@@ -190,6 +198,7 @@ export function Services() {
                             <Switch
                               checked={service.active}
                               onCheckedChange={() => handleToggleActive(service)}
+                              disabled={currentAdmin?.role === 'receptionist'}
                             />
                             <Badge 
                               variant="secondary" 
@@ -203,25 +212,31 @@ export function Services() {
                           </div>
                         </TableCell>
                         <TableCell>
-                          <div className="flex gap-2">
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              onClick={() => handleEdit(service)}
-                            >
-                              <Edit className="h-4 w-4" />
-                            </Button>
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              onClick={() => {
-                                setServiceToDelete(service);
-                                setDeleteDialogOpen(true);
-                              }}
-                            >
-                              <Trash2 className="h-4 w-4 text-red-600" />
-                            </Button>
-                          </div>
+                          {(currentAdmin?.role === 'super-admin' || 
+                            currentAdmin?.role === 'appointment-manager' || 
+                            currentAdmin?.role === 'manager') && (
+                            <div className="flex gap-2">
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => handleEdit(service)}
+                              >
+                                <Edit className="h-4 w-4" />
+                              </Button>
+                              {(currentAdmin?.role === 'super-admin' || currentAdmin?.role === 'appointment-manager') && (
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  onClick={() => {
+                                    setServiceToDelete(service);
+                                    setDeleteDialogOpen(true);
+                                  }}
+                                >
+                                  <Trash2 className="h-4 w-4 text-red-600" />
+                                </Button>
+                              )}
+                            </div>
+                          )}
                         </TableCell>
                       </TableRow>
                     ))}

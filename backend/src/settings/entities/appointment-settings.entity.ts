@@ -32,6 +32,15 @@ export class AppointmentSettings {
   @Column({ type: 'jsonb', default: () => `'["Sunday","Monday","Tuesday","Wednesday","Thursday", "Friday", "Saturday"]'` })
   working_days: string[];
 
+  @Column({ type: 'boolean', default: false, name: 'calendar_connected' })
+  calendar_connected: boolean;
+
+  @Column({ type: 'uuid', nullable: true, name: 'created_by' })
+  created_by: string;
+
+  @Column({ type: 'uuid', nullable: true, name: 'updated_by' })
+  updated_by: string;
+
   @CreateDateColumn({ name: 'created_at' })
   created_at: Date;
 

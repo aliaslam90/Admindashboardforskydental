@@ -1,25 +1,43 @@
 import { useEffect, useMemo, useState } from 'react';
-import { ChevronLeft, ChevronRight, Plus } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Plus, RefreshCw } from 'lucide-react';
 import { Button } from '../components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../components/ui/select';
-import { Appointment, AppointmentStatus, Doctor } from '../data/types';
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '../components/ui/dialog';
+import { Input } from '../components/ui/input';
+import { Label } from '../components/ui/label';
+import { AppointmentDrawer } from '../components/AppointmentDrawer';
+import { Appointment, AppointmentStatus, Doctor, Admin } from '../data/types';
 import { appointmentsApi } from '../services/appointmentsApi';
 import { doctorsApi } from '../services/doctorsApi';
+import { servicesApi, Service } from '../services/servicesApi';
+import { cancelAppointmentFlow, rescheduleAppointmentFlow, updateStatusFlow } from './appointmentActions';
 import { toast } from 'sonner';
 import { CreateAppointmentPrefill } from '../components/CreateAppointmentModal';
 
 interface CalendarViewProps {
   onCreateAppointment: (prefill?: CreateAppointmentPrefill) => void;
+  currentAdmin?: Admin | null;
 }
 
-export function CalendarView({ onCreateAppointment }: CalendarViewProps) {
+export function CalendarView({ onCreateAppointment, currentAdmin }: CalendarViewProps) {
   const [currentDate, setCurrentDate] = useState(new Date());
   const [view, setView] = useState<'day' | 'week'>('day');
   const [selectedDoctor, setSelectedDoctor] = useState<string>('all');
   const [appointments, setAppointments] = useState<Appointment[]>([]);
   const [doctorOptions, setDoctorOptions] = useState<Doctor[]>([]);
+  const [serviceOptions, setServiceOptions] = useState<Service[]>([]);
   const [isLoading, setIsLoading] = useState(false);
+  const [selectedAppointment, setSelectedAppointment] = useState<Appointment | null>(null);
+  const [drawerOpen, setDrawerOpen] = useState(false);
+  const [rescheduleOpen, setRescheduleOpen] = useState(false);
+  const [rescheduleAppointmentId, setRescheduleAppointmentId] = useState<string | null>(null);
+  const [rescheduleForm, setRescheduleForm] = useState({
+    date: '',
+    time: ''
+  });
+  const [isRescheduling, setIsRescheduling] = useState(false);
+  const [isCancelling, setIsCancelling] = useState(false);
 
   const timeSlots = Array.from({ length: 10 }, (_, i) => {
     const hour = i + 9; // 9 AM to 6 PM
@@ -117,6 +135,18 @@ export function CalendarView({ onCreateAppointment }: CalendarViewProps) {
   }, []);
 
   useEffect(() => {
+    const loadServices = async () => {
+      try {
+        const services = await servicesApi.getAll();
+        setServiceOptions(services);
+      } catch (error) {
+        console.error('Failed to load services', error);
+      }
+    };
+    loadServices();
+  }, []);
+
+  useEffect(() => {
     const fetchAppointments = async () => {
       setIsLoading(true);
       const days = view === 'week' ? getWeekDays(currentDate) : [currentDate];
@@ -156,6 +186,113 @@ export function CalendarView({ onCreateAppointment }: CalendarViewProps) {
     setCurrentDate(new Date());
   };
 
+  const handleAutoCancelPast = async () => {
+    setIsCancelling(true);
+    try {
+      const result = await appointmentsApi.autoCancelPastBooked();
+      if (result.cancelled > 0) {
+        toast.success(`Successfully cancelled ${result.cancelled} past appointment${result.cancelled > 1 ? 's' : ''}`, {
+          description: 'Past booked appointments have been automatically cancelled'
+        });
+        // Refresh calendar appointments
+        const days = view === 'week' ? getWeekDays(currentDate) : [currentDate];
+        const start = days[0];
+        const end = days[days.length - 1];
+        const format = (d: Date) => d.toISOString().split('T')[0];
+        const results = await appointmentsApi.getAll({
+          dateFrom: format(start),
+          dateTo: format(end),
+          ...(selectedDoctor !== 'all' ? { doctorId: selectedDoctor } : {}),
+        });
+        setAppointments(results);
+      } else {
+        toast.info('No past booked appointments found to cancel', {
+          description: 'All appointments are up to date'
+        });
+      }
+    } catch (error) {
+      console.error('Failed to auto-cancel past appointments', error);
+      toast.error('Failed to cancel past appointments');
+    } finally {
+      setIsCancelling(false);
+    }
+  };
+
+  const handleOpenAppointment = (appointment: Appointment) => {
+    setSelectedAppointment(appointment);
+    setDrawerOpen(true);
+  };
+
+  const handleConfirm = async (id: string) => {
+    await updateStatusFlow({
+      appointmentId: id,
+      newStatus: 'confirmed',
+      appointments,
+      setAppointments,
+    });
+  };
+
+  const handleCheckIn = async (id: string) => {
+    await updateStatusFlow({
+      appointmentId: id,
+      newStatus: 'checked-in',
+      appointments,
+      setAppointments,
+    });
+  };
+
+  const handleComplete = async (id: string) => {
+    await updateStatusFlow({
+      appointmentId: id,
+      newStatus: 'completed',
+      appointments,
+      setAppointments,
+    });
+  };
+
+  const handleReschedule = (id: string) => {
+    const appointment = appointments.find(apt => apt.id === id);
+    if (appointment) {
+      setRescheduleAppointmentId(id);
+      setRescheduleForm({
+        date: appointment.date,
+        time: appointment.time
+      });
+      setRescheduleOpen(true);
+    }
+  };
+
+  const handleSaveReschedule = async () => {
+    await rescheduleAppointmentFlow({
+      appointmentId: rescheduleAppointmentId,
+      appointments,
+      serviceOptions,
+      rescheduleForm,
+      setAppointments,
+      setRescheduleOpen,
+      setRescheduleAppointmentId,
+      setRescheduleForm,
+      setIsRescheduling,
+    });
+  };
+
+  const handleCancel = async (id: string) => {
+    await cancelAppointmentFlow({
+      appointmentId: id,
+      appointments,
+      setAppointments,
+    });
+  };
+
+  const handleNoShow = async (id: string) => {
+    await updateStatusFlow({
+      appointmentId: id,
+      newStatus: 'no-show',
+      appointments,
+      setAppointments,
+    });
+  };
+
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -164,10 +301,23 @@ export function CalendarView({ onCreateAppointment }: CalendarViewProps) {
           <h1 className="text-2xl font-semibold text-gray-900">Calendar View</h1>
           <p className="text-sm text-gray-500 mt-1">Visual scheduling and conflict prevention</p>
         </div>
-        <Button onClick={onCreateAppointment} className="bg-[rgb(203,255,143)] hover:bg-[#AEEF5A]">
-          <Plus className="h-4 w-4 mr-2" />
-          New Appointment
-        </Button>
+        <div className="flex items-center gap-2">
+          {currentAdmin?.role !== 'receptionist' && (
+            <Button 
+              variant="outline" 
+              onClick={handleAutoCancelPast}
+              disabled={isCancelling}
+              className="border-orange-200 text-orange-700 hover:bg-orange-50 hover:text-orange-800"
+            >
+              <RefreshCw className={`h-4 w-4 mr-2 ${isCancelling ? 'animate-spin' : ''}`} />
+              {isCancelling ? 'Cancelling...' : 'Cancel Past Appointments'}
+            </Button>
+          )}
+          <Button onClick={onCreateAppointment} className="bg-[rgb(203,255,143)] hover:bg-[#AEEF5A]">
+            <Plus className="h-4 w-4 mr-2" />
+            New Appointment
+          </Button>
+        </div>
       </div>
 
       {/* Controls */}
@@ -350,7 +500,7 @@ export function CalendarView({ onCreateAppointment }: CalendarViewProps) {
                                 title={statusLabel(apt.status)}
                                 onClick={(e) => {
                                   e.stopPropagation();
-                                  // Open appointment details
+                                  handleOpenAppointment(apt);
                                 }}
                               >
                                 <p className="font-medium text-gray-900 truncate">{apt.patientName}</p>
@@ -405,6 +555,74 @@ export function CalendarView({ onCreateAppointment }: CalendarViewProps) {
           </div>
         </CardContent>
       </Card>
+
+      {/* Appointment Drawer */}
+      <AppointmentDrawer
+        appointment={selectedAppointment}
+        open={drawerOpen}
+        onClose={() => {
+          setDrawerOpen(false);
+          setSelectedAppointment(null);
+        }}
+        onConfirm={handleConfirm}
+        onCheckIn={handleCheckIn}
+        onComplete={handleComplete}
+        onReschedule={handleReschedule}
+        onCancel={handleCancel}
+        onNoShow={handleNoShow}
+      />
+
+      {/* Reschedule Dialog */}
+      <Dialog open={rescheduleOpen} onOpenChange={setRescheduleOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Reschedule Appointment</DialogTitle>
+            <DialogDescription>
+              Select a new date and time for this appointment.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label htmlFor="reschedule-date">Date *</Label>
+              <Input
+                id="reschedule-date"
+                type="date"
+                value={rescheduleForm.date}
+                onChange={(e) => setRescheduleForm(prev => ({ ...prev, date: e.target.value }))}
+                min={new Date().toISOString().split('T')[0]}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="reschedule-time">Time *</Label>
+              <Input
+                id="reschedule-time"
+                type="time"
+                value={rescheduleForm.time}
+                onChange={(e) => setRescheduleForm(prev => ({ ...prev, time: e.target.value }))}
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => {
+                setRescheduleOpen(false);
+                setRescheduleAppointmentId(null);
+                setRescheduleForm({ date: '', time: '' });
+              }}
+              disabled={isRescheduling}
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={handleSaveReschedule}
+              disabled={isRescheduling || !rescheduleForm.date || !rescheduleForm.time}
+            >
+              {isRescheduling ? 'Rescheduling...' : 'Reschedule'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

@@ -1,5 +1,5 @@
 import { useState, useMemo, useEffect } from 'react';
-import { Plus, Search, Filter, MoreVertical, Calendar as CalendarIcon, Edit, Ban, CheckCircle2, Clock } from 'lucide-react';
+import { Plus, Search, Filter, MoreVertical, Calendar as CalendarIcon, Edit, Ban, CheckCircle2, Clock, RefreshCw } from 'lucide-react';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
 import { Label } from '../components/ui/label';
@@ -10,7 +10,7 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSepara
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '../components/ui/dialog';
 import { StatusBadge } from '../components/StatusBadge';
 import { AppointmentDrawer } from '../components/AppointmentDrawer';
-import { Appointment, AppointmentStatus, Doctor } from '../data/types';
+import { Appointment, AppointmentStatus, Doctor, Admin } from '../data/types';
 import { appointmentsApi } from '../services/appointmentsApi';
 import { cancelAppointmentFlow, rescheduleAppointmentFlow, updateStatusFlow } from './appointmentActions';
 import { doctorsApi } from '../services/doctorsApi';
@@ -22,9 +22,10 @@ interface AppointmentsProps {
   onCreateAppointment: (prefill?: CreateAppointmentPrefill) => void;
   selectedAppointmentId?: string;
   refreshKey?: number;
+  currentAdmin?: Admin | null;
 }
 
-export function Appointments({ onCreateAppointment, selectedAppointmentId, refreshKey = 0 }: AppointmentsProps) {
+export function Appointments({ onCreateAppointment, selectedAppointmentId, refreshKey = 0, currentAdmin }: AppointmentsProps) {
   const [appointments, setAppointments] = useState<Appointment[]>([]);
   const [doctorOptions, setDoctorOptions] = useState<Doctor[]>([]);
   const [serviceOptions, setServiceOptions] = useState<Service[]>([]);
@@ -38,6 +39,7 @@ export function Appointments({ onCreateAppointment, selectedAppointmentId, refre
   });
   const [isLoading, setIsLoading] = useState(false);
   const [isRescheduling, setIsRescheduling] = useState(false);
+  const [isCancelling, setIsCancelling] = useState(false);
   const openNativePicker = (e: React.FocusEvent<HTMLInputElement> | React.MouseEvent<HTMLInputElement>) => {
     // Improves UX on browsers that support showPicker (e.g., Chrome)
     const input = e.currentTarget;
@@ -253,6 +255,30 @@ export function Appointments({ onCreateAppointment, selectedAppointmentId, refre
     }
   };
 
+  const handleAutoCancelPast = async () => {
+    setIsCancelling(true);
+    try {
+      const result = await appointmentsApi.autoCancelPastBooked();
+      if (result.cancelled > 0) {
+        toast.success(`Successfully cancelled ${result.cancelled} past appointment${result.cancelled > 1 ? 's' : ''}`, {
+          description: 'Past booked appointments have been automatically cancelled'
+        });
+        // Refresh appointments data
+        const data = await appointmentsApi.getAll();
+        setAppointments(data);
+      } else {
+        toast.info('No past booked appointments found to cancel', {
+          description: 'All appointments are up to date'
+        });
+      }
+    } catch (error) {
+      console.error('Failed to auto-cancel past appointments', error);
+      toast.error('Failed to cancel past appointments');
+    } finally {
+      setIsCancelling(false);
+    }
+  };
+
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -261,10 +287,23 @@ export function Appointments({ onCreateAppointment, selectedAppointmentId, refre
           <h1 className="text-2xl font-semibold text-gray-900">Appointments</h1>
           <p className="text-sm text-gray-500 mt-1">Manage and track all appointments</p>
         </div>
-        <Button onClick={() => onCreateAppointment()}>
-          <Plus className="h-4 w-4 mr-2" />
-          New Appointment
-        </Button>
+        <div className="flex items-center gap-2">
+          {currentAdmin?.role !== 'receptionist' && (
+            <Button 
+              variant="outline" 
+              onClick={handleAutoCancelPast}
+              disabled={isCancelling}
+              className="border-orange-200 text-orange-700 hover:bg-orange-50 hover:text-orange-800"
+            >
+              <RefreshCw className={`h-4 w-4 mr-2 ${isCancelling ? 'animate-spin' : ''}`} />
+              {isCancelling ? 'Cancelling...' : 'Cancel Past Appointments'}
+            </Button>
+          )}
+          <Button onClick={() => onCreateAppointment()}>
+            <Plus className="h-4 w-4 mr-2" />
+            New Appointment
+          </Button>
+        </div>
       </div>
 
       {/* Filters */}
@@ -474,33 +513,33 @@ export function Appointments({ onCreateAppointment, selectedAppointmentId, refre
                       </TableCell>
                       <TableCell>
                         {(appointment.status !== 'completed' && appointment.status !== 'cancelled') && (
-                          <DropdownMenu>
-                            <DropdownMenuTrigger asChild onClick={(e) => e.stopPropagation()}>
-                              <Button variant="ghost" size="sm">
-                                <MoreVertical className="h-4 w-4" />
-                              </Button>
-                            </DropdownMenuTrigger>
-                            <DropdownMenuContent align="end">
-                              {appointment.status === 'booked' && (
-                                <>
-                                  <DropdownMenuItem onClick={(e) => {
-                                    e.stopPropagation();
-                                    handleQuickAction(appointment, 'confirm');
-                                  }}>
-                                    <CheckCircle2 className="h-4 w-4 mr-2" />
-                                    Confirm
-                                  </DropdownMenuItem>
-                                  <DropdownMenuSeparator />
-                                </>
-                              )}
-                              {(appointment.status === 'booked' || appointment.status === 'confirmed') && (
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild onClick={(e) => e.stopPropagation()}>
+                            <Button variant="ghost" size="sm">
+                              <MoreVertical className="h-4 w-4" />
+                            </Button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end">
+                            {appointment.status === 'booked' && (
+                              <>
                                 <DropdownMenuItem onClick={(e) => {
                                   e.stopPropagation();
-                                  handleQuickAction(appointment, 'reschedule');
+                                  handleQuickAction(appointment, 'confirm');
                                 }}>
-                                  <Edit className="h-4 w-4 mr-2" />
-                                  Reschedule
+                                  <CheckCircle2 className="h-4 w-4 mr-2" />
+                                  Confirm
                                 </DropdownMenuItem>
+                                <DropdownMenuSeparator />
+                              </>
+                            )}
+                              {(appointment.status === 'booked' || appointment.status === 'confirmed') && (
+                            <DropdownMenuItem onClick={(e) => {
+                              e.stopPropagation();
+                              handleQuickAction(appointment, 'reschedule');
+                            }}>
+                              <Edit className="h-4 w-4 mr-2" />
+                              Reschedule
+                            </DropdownMenuItem>
                               )}
                               <DropdownMenuItem 
                                 onClick={(e) => {
@@ -512,8 +551,8 @@ export function Appointments({ onCreateAppointment, selectedAppointmentId, refre
                                 <Ban className="h-4 w-4 mr-2" />
                                 Cancel
                               </DropdownMenuItem>
-                            </DropdownMenuContent>
-                          </DropdownMenu>
+                          </DropdownMenuContent>
+                        </DropdownMenu>
                         )}
                       </TableCell>
                     </TableRow>

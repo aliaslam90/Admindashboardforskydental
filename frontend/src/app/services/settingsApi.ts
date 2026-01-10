@@ -9,6 +9,7 @@ export interface AppointmentSettings {
   opening_time: string; // HH:mm
   closing_time: string; // HH:mm
   working_days: string[];
+  calendar_connected: boolean;
   created_at: string;
   updated_at: string;
 }
@@ -21,6 +22,7 @@ export interface UpdateAppointmentSettingsPayload {
   opening_time?: string;
   closing_time?: string;
   working_days?: string[];
+  calendar_connected?: boolean;
 }
 
 class SettingsApi {

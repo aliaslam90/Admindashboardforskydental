@@ -13,7 +13,8 @@ import { Badge } from '../components/ui/badge';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../components/ui/table';
 import { Admin, AdminRole } from '../data/types';
 import { toast } from 'sonner';
-import { settingsApi, AppointmentSettings } from '../services/settingsApi';
+import { settingsApi } from '../services/settingsApi';
+import { usersApi } from '../services/usersApi';
 
 interface SettingsProps {
   currentAdmin?: Admin;
@@ -42,12 +43,14 @@ export function Settings({ currentAdmin, onLogout }: SettingsProps) {
     lastLogin: new Date().toISOString(),
     createdAt: new Date().toISOString()
   };
-  const [appointmentSettings, setAppointmentSettings] = useState<AppointmentSettings | null>(null);
   const [isLoadingSettings, setIsLoadingSettings] = useState(true);
   const [bufferTime, setBufferTime] = useState('15');
   const [cancellationWindow, setCancellationWindow] = useState('24');
   const [otpRequired, setOtpRequired] = useState(false);
   const [otpExpiry, setOtpExpiry] = useState('5');
+  const [openingTime, setOpeningTime] = useState('09:00');
+  const [closingTime, setClosingTime] = useState('18:00');
+  const [workingDays, setWorkingDays] = useState<string[]>(['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday']);
   const [calendarConnected, setCalendarConnected] = useState(true);
   const [confirmDialog, setConfirmDialog] = useState<{open: boolean; type: string} | null>(null);
   const [logoutDialogOpen, setLogoutDialogOpen] = useState(false);
@@ -66,20 +69,54 @@ export function Settings({ currentAdmin, onLogout }: SettingsProps) {
     role: 'appointment-manager' as AdminRole
   });
 
-  // Fetch appointment settings on mount
+  // Fetch appointment settings and admins on mount
   useEffect(() => {
     const loadSettings = async () => {
       try {
         setIsLoadingSettings(true);
-        const settings = await settingsApi.getAppointmentSettings();
-        setAppointmentSettings(settings);
+        const [settings, users] = await Promise.all([
+          settingsApi.getAppointmentSettings(),
+          usersApi.getAll(),
+        ]);
+        
         setBufferTime(settings.buffer_minutes.toString());
         setCancellationWindow(settings.cancellation_window_hours.toString());
         setOtpRequired(settings.otp_required);
         setOtpExpiry(settings.otp_expiry_minutes.toString());
+        setOpeningTime(settings.opening_time || '09:00');
+        setClosingTime(settings.closing_time || '18:00');
+        setWorkingDays(settings.working_days || ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday']);
+        setCalendarConnected(settings.calendar_connected ?? false);
+        
+        // Convert backend users to Admin format for display
+        const adminUsers: Admin[] = users
+          .filter(user => user.role === 'admin' || user.role === 'manager' || user.role === 'receptionist')
+          .map(user => ({
+            id: user.id,
+            name: user.full_name,
+            email: user.email,
+            phone: user.phone_number,
+            role: (user.role === 'admin' ? 'super-admin' : user.role === 'manager' ? 'manager' : 'receptionist') as AdminRole,
+            status: (user.is_active ? 'active' : 'inactive') as 'active' | 'inactive',
+            permissions: {
+              dashboard: true,
+              appointments: true,
+              calendar: true,
+              patients: true,
+              doctors: true,
+              services: true,
+              notifications: true,
+              settings: user.role === 'admin',
+              adminManagement: user.role === 'admin',
+            },
+            lastLogin: user.last_login || undefined,
+            createdAt: user.created_at,
+          }));
+        
+        setAdmins(adminUsers.length > 0 ? adminUsers : [fallbackAdmin]);
       } catch (error) {
-        console.error('Failed to load appointment settings', error);
-        toast.error('Failed to load appointment settings');
+        console.error('Failed to load settings', error);
+        toast.error('Failed to load settings');
       } finally {
         setIsLoadingSettings(false);
       }
@@ -87,13 +124,33 @@ export function Settings({ currentAdmin, onLogout }: SettingsProps) {
     loadSettings();
   }, []);
 
+  const handleSaveWorkingHours = async () => {
+    try {
+      setIsSubmitting(true);
+      await settingsApi.updateAppointmentSettings({
+        opening_time: openingTime,
+        closing_time: closingTime,
+        working_days: workingDays,
+      });
+      toast.success('Working hours updated', {
+        description: 'Clinic working hours have been saved successfully'
+      });
+    } catch (error) {
+      console.error('Failed to update working hours', error);
+      toast.error('Failed to update working hours', {
+        description: error instanceof Error ? error.message : 'An error occurred'
+      });
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
   const handleSaveBufferTime = async () => {
     try {
       setIsSubmitting(true);
-      const updated = await settingsApi.updateAppointmentSettings({
+      await settingsApi.updateAppointmentSettings({
         buffer_minutes: parseInt(bufferTime, 10),
       });
-      setAppointmentSettings(updated);
       toast.success('Buffer time updated', {
         description: 'Changes will affect future appointments only'
       });
@@ -109,10 +166,9 @@ export function Settings({ currentAdmin, onLogout }: SettingsProps) {
   const handleSaveCancellationWindow = async () => {
     try {
       setIsSubmitting(true);
-      const updated = await settingsApi.updateAppointmentSettings({
+      await settingsApi.updateAppointmentSettings({
         cancellation_window_hours: parseInt(cancellationWindow, 10),
       });
-      setAppointmentSettings(updated);
       toast.success('Cancellation window updated');
       setConfirmDialog(null);
     } catch (error) {
@@ -126,11 +182,10 @@ export function Settings({ currentAdmin, onLogout }: SettingsProps) {
   const handleSaveOtpSettings = async () => {
     try {
       setIsSubmitting(true);
-      const updated = await settingsApi.updateAppointmentSettings({
+      await settingsApi.updateAppointmentSettings({
         otp_required: otpRequired,
         otp_expiry_minutes: parseInt(otpExpiry, 10),
       });
-      setAppointmentSettings(updated);
       toast.success('OTP settings updated');
       setConfirmDialog(null);
     } catch (error) {
@@ -145,6 +200,26 @@ export function Settings({ currentAdmin, onLogout }: SettingsProps) {
     setConfirmDialog({ open: true, type: 'calendar' });
   };
 
+  const handleSaveCalendarConnection = async (connected: boolean) => {
+    try {
+      setIsSubmitting(true);
+      await settingsApi.updateAppointmentSettings({
+        calendar_connected: connected,
+      });
+      setCalendarConnected(connected);
+      toast.success(connected ? 'Calendar connected' : 'Calendar disconnected', {
+        description: connected 
+          ? 'New appointments will sync with your calendar'
+          : 'New appointments will no longer sync'
+      });
+    } catch (error) {
+      console.error('Failed to update calendar connection', error);
+      toast.error('Failed to update calendar connection');
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
   const handleConfirm = () => {
     if (confirmDialog?.type === 'buffer') {
       handleSaveBufferTime();
@@ -153,10 +228,7 @@ export function Settings({ currentAdmin, onLogout }: SettingsProps) {
     } else if (confirmDialog?.type === 'otp') {
       handleSaveOtpSettings();
     } else if (confirmDialog?.type === 'calendar') {
-      setCalendarConnected(false);
-      toast.success('Calendar disconnected', {
-        description: 'New appointments will no longer sync'
-      });
+      handleSaveCalendarConnection(false);
       setConfirmDialog(null);
     }
   };
@@ -197,18 +269,56 @@ export function Settings({ currentAdmin, onLogout }: SettingsProps) {
     e.preventDefault();
     setIsSubmitting(true);
     try {
-      const newAdmin: Admin = {
-        id: admins.length + 1,
-        name: adminForm.name,
+      // Map frontend role to backend role
+      const backendRole = adminForm.role === 'super-admin' ? 'admin' : 
+                         adminForm.role === 'appointment-manager' ? 'admin' :
+                         adminForm.role === 'manager' ? 'manager' :
+                         adminForm.role === 'receptionist' ? 'receptionist' : 'admin';
+      
+      const newUser = await usersApi.create({
         email: adminForm.email,
-        phone: adminForm.phone,
-        role: adminForm.role
+        password: 'TempPassword123!', // Default password - should be changed on first login
+        full_name: adminForm.name,
+        phone_number: adminForm.phone,
+        role: backendRole,
+        is_active: true,
+        email_verified: false,
+      });
+      
+      // Convert to Admin format and add to list
+      const newAdmin: Admin = {
+        id: newUser.id,
+        name: newUser.full_name,
+        email: newUser.email,
+        phone: newUser.phone_number,
+        role: newUser.role === 'admin' ? 'super-admin' : newUser.role === 'manager' ? 'manager' : 'receptionist',
+        status: newUser.is_active ? 'active' : 'inactive',
+        permissions: {
+          dashboard: true,
+          appointments: true,
+          calendar: true,
+          patients: true,
+          doctors: true,
+          services: true,
+          notifications: true,
+          settings: newUser.role === 'admin',
+          adminManagement: newUser.role === 'admin',
+        },
+        lastLogin: newUser.last_login || undefined,
+        createdAt: newUser.created_at,
       };
+      
       setAdmins(prev => [...prev, newAdmin]);
-      toast.success('Admin added successfully');
+      toast.success('Admin added successfully', {
+        description: 'Default password: TempPassword123! - Please change on first login'
+      });
       setAddAdminOpen(false);
+      setAdminForm({ name: '', email: '', phone: '', role: 'appointment-manager' });
     } catch (error) {
-      toast.error('Failed to add admin');
+      console.error('Failed to add admin', error);
+      toast.error('Failed to add admin', {
+        description: error instanceof Error ? error.message : 'An error occurred'
+      });
     } finally {
       setIsSubmitting(false);
     }
@@ -216,22 +326,55 @@ export function Settings({ currentAdmin, onLogout }: SettingsProps) {
 
   const handleEditAdminSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!selectedAdmin) return;
+    
     setIsSubmitting(true);
     try {
-      const updatedAdmins = admins.map(admin => 
-        admin.id === selectedAdmin?.id ? {
-          ...admin,
-          name: adminForm.name,
-          email: adminForm.email,
-          phone: adminForm.phone,
-          role: adminForm.role
-        } : admin
-      );
-      setAdmins(updatedAdmins);
+      // Map frontend role to backend role
+      const backendRole = adminForm.role === 'super-admin' ? 'admin' : 
+                         adminForm.role === 'appointment-manager' ? 'admin' :
+                         adminForm.role === 'manager' ? 'manager' :
+                         adminForm.role === 'receptionist' ? 'receptionist' : 'admin';
+      
+      const updatedUser = await usersApi.update(selectedAdmin.id, {
+        email: adminForm.email,
+        full_name: adminForm.name,
+        phone_number: adminForm.phone,
+        role: backendRole,
+      });
+      
+      // Convert to Admin format and update list
+      const updatedAdmin: Admin = {
+        id: updatedUser.id,
+        name: updatedUser.full_name,
+        email: updatedUser.email,
+        phone: updatedUser.phone_number,
+        role: updatedUser.role === 'admin' ? 'super-admin' : updatedUser.role === 'manager' ? 'manager' : 'receptionist',
+        status: updatedUser.is_active ? 'active' : 'inactive',
+        permissions: {
+          dashboard: true,
+          appointments: true,
+          calendar: true,
+          patients: true,
+          doctors: true,
+          services: true,
+          notifications: true,
+          settings: updatedUser.role === 'admin',
+          adminManagement: updatedUser.role === 'admin',
+        },
+        lastLogin: updatedUser.last_login || undefined,
+        createdAt: updatedUser.created_at,
+      };
+      
+      setAdmins(prev => prev.map(admin => admin.id === selectedAdmin.id ? updatedAdmin : admin));
       toast.success('Admin updated successfully');
       setEditAdminOpen(false);
+      setSelectedAdmin(null);
     } catch (error) {
-      toast.error('Failed to update admin');
+      console.error('Failed to update admin', error);
+      toast.error('Failed to update admin', {
+        description: error instanceof Error ? error.message : 'An error occurred'
+      });
     } finally {
       setIsSubmitting(false);
     }
@@ -239,14 +382,20 @@ export function Settings({ currentAdmin, onLogout }: SettingsProps) {
 
   const handleDeleteAdminSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!selectedAdmin) return;
+    
     setIsSubmitting(true);
     try {
-      const updatedAdmins = admins.filter(admin => admin.id !== selectedAdmin?.id);
-      setAdmins(updatedAdmins);
+      await usersApi.delete(selectedAdmin.id);
+      setAdmins(prev => prev.filter(admin => admin.id !== selectedAdmin.id));
       toast.success('Admin deleted successfully');
       setDeleteAdminOpen(false);
+      setSelectedAdmin(null);
     } catch (error) {
-      toast.error('Failed to delete admin');
+      console.error('Failed to delete admin', error);
+      toast.error('Failed to delete admin', {
+        description: error instanceof Error ? error.message : 'An error occurred'
+      });
     } finally {
       setIsSubmitting(false);
     }
@@ -278,11 +427,11 @@ export function Settings({ currentAdmin, onLogout }: SettingsProps) {
                 <User className="h-8 w-8 text-blue-600" />
               </div>
               <div className="space-y-1">
-                <h3 className="font-semibold text-gray-900">{currentAdmin.name}</h3>
-                <p className="text-sm text-gray-600">{currentAdmin.email}</p>
-                <p className="text-sm text-gray-500">{currentAdmin.phone}</p>
-                <Badge variant={currentAdmin.role === 'super-admin' ? 'default' : 'secondary'} className="mt-2">
-                  {currentAdmin.role === 'super-admin' ? 'Super Admin' : 'Appointment Manager'}
+                <h3 className="font-semibold text-gray-900">{fallbackAdmin.name}</h3>
+                <p className="text-sm text-gray-600">{fallbackAdmin.email}</p>
+                <p className="text-sm text-gray-500">{fallbackAdmin.phone}</p>
+                <Badge variant={fallbackAdmin.role === 'super-admin' ? 'default' : 'secondary'} className="mt-2">
+                  {fallbackAdmin.role === 'super-admin' ? 'Super Admin' : 'Appointment Manager'}
                 </Badge>
               </div>
             </div>
@@ -299,7 +448,7 @@ export function Settings({ currentAdmin, onLogout }: SettingsProps) {
       </Card>
 
       {/* Admin Management - Only for Super Admin */}
-      {currentAdmin.permissions.adminManagement && (
+      {currentAdmin?.permissions?.adminManagement && (
         <Card>
           <CardHeader>
             <div className="flex items-center justify-between">
@@ -409,7 +558,9 @@ export function Settings({ currentAdmin, onLogout }: SettingsProps) {
               <Input
                 id="open-time"
                 type="time"
-                defaultValue="09:00"
+                value={openingTime}
+                onChange={(e) => setOpeningTime(e.target.value)}
+                disabled={isLoadingSettings || isSubmitting}
               />
             </div>
             <div className="space-y-2">
@@ -417,7 +568,9 @@ export function Settings({ currentAdmin, onLogout }: SettingsProps) {
               <Input
                 id="close-time"
                 type="time"
-                defaultValue="18:00"
+                value={closingTime}
+                onChange={(e) => setClosingTime(e.target.value)}
+                disabled={isLoadingSettings || isSubmitting}
               />
             </div>
           </div>
@@ -427,13 +580,27 @@ export function Settings({ currentAdmin, onLogout }: SettingsProps) {
             {['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'].map(day => (
               <div key={day} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
                 <span className="text-sm font-medium text-gray-900">{day}</span>
-                <Switch defaultChecked={day !== 'Friday'} />
+                <Switch 
+                  checked={workingDays.includes(day)}
+                  onCheckedChange={(checked) => {
+                    if (checked) {
+                      setWorkingDays([...workingDays, day]);
+                    } else {
+                      setWorkingDays(workingDays.filter(d => d !== day));
+                    }
+                  }}
+                  disabled={isLoadingSettings || isSubmitting}
+                />
               </div>
             ))}
           </div>
 
-          <Button className="bg-[rgb(203,255,143)] hover:bg-[#AEEF5A]">
-            Save Working Hours
+          <Button 
+            className="bg-[rgb(203,255,143)] hover:bg-[#AEEF5A]"
+            onClick={handleSaveWorkingHours}
+            disabled={isLoadingSettings || isSubmitting}
+          >
+            {isSubmitting ? 'Saving...' : 'Save Working Hours'}
           </Button>
         </CardContent>
       </Card>
@@ -623,11 +790,16 @@ export function Settings({ currentAdmin, onLogout }: SettingsProps) {
                 variant="outline" 
                 onClick={handleDisconnectCalendar}
                 className="text-red-600 hover:text-red-700"
+                disabled={isSubmitting || isLoadingSettings}
               >
                 Disconnect
               </Button>
             ) : (
-              <Button className="bg-blue-600 hover:bg-blue-700">
+              <Button 
+                className="bg-blue-600 hover:bg-blue-700"
+                onClick={() => handleSaveCalendarConnection(true)}
+                disabled={isSubmitting || isLoadingSettings}
+              >
                 Connect
               </Button>
             )}

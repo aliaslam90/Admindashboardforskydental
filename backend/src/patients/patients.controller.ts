@@ -9,6 +9,7 @@ import {
   HttpCode,
   HttpStatus,
   Query,
+  Headers,
 } from '@nestjs/common';
 import { PatientsService } from './patients.service';
 import { CreatePatientDto } from './dto/create-patient.dto';
@@ -20,8 +21,11 @@ export class PatientsController {
 
   @Post()
   @HttpCode(HttpStatus.CREATED)
-  create(@Body() createPatientDto: CreatePatientDto) {
-    return this.patientsService.create(createPatientDto);
+  create(
+    @Body() createPatientDto: CreatePatientDto,
+    @Headers('x-user-id') userId?: string,
+  ) {
+    return this.patientsService.create(createPatientDto, userId);
   }
 
   @Get()
@@ -35,8 +39,12 @@ export class PatientsController {
   }
 
   @Patch(':id')
-  update(@Param('id') id: string, @Body() updatePatientDto: UpdatePatientDto) {
-    return this.patientsService.update(id, updatePatientDto);
+  update(
+    @Param('id') id: string,
+    @Body() updatePatientDto: UpdatePatientDto,
+    @Headers('x-user-id') userId?: string,
+  ) {
+    return this.patientsService.update(id, updatePatientDto, userId);
   }
 
   @Delete(':id')

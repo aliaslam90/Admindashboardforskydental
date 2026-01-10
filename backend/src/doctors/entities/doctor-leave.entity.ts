@@ -27,6 +27,12 @@ export class DoctorLeave {
   @Column({ type: 'varchar', length: 255, nullable: true })
   reason: string;
 
+  @Column({ type: 'uuid', nullable: true, name: 'created_by' })
+  created_by: string;
+
+  @Column({ type: 'uuid', nullable: true, name: 'updated_by' })
+  updated_by: string;
+
   @CreateDateColumn({ name: 'created_at' })
   created_at: Date;
 

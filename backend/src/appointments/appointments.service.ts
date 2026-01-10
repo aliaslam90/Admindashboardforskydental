@@ -2,6 +2,7 @@ import {
   Injectable,
   NotFoundException,
   BadRequestException,
+  ForbiddenException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, Between, Like, Not } from 'typeorm';
@@ -14,6 +15,7 @@ import { Doctor } from '../doctors/entities/doctor.entity';
 import { Service } from '../services/entities/service.entity';
 import { SettingsService } from '../settings/settings.service';
 import { AppointmentSettings } from '../settings/entities/appointment-settings.entity';
+import { User, UserRole } from '../users/entities/user.entity';
 
 export interface AppointmentFilters {
   search?: string;
@@ -36,8 +38,27 @@ export class AppointmentsService {
     private readonly doctorRepository: Repository<Doctor>,
     @InjectRepository(Service)
     private readonly serviceRepository: Repository<Service>,
+    @InjectRepository(User)
+    private readonly userRepository: Repository<User>,
     private readonly settingsService: SettingsService,
   ) {}
+
+  private async checkRolePermission(userId?: string, allowedRoles: UserRole[] = [UserRole.ADMIN]): Promise<void> {
+    if (!userId) {
+      // If no userId provided, allow (for backward compatibility)
+      // In production, you should require authentication
+      return;
+    }
+
+    const user = await this.userRepository.findOne({ where: { id: userId } });
+    if (!user) {
+      throw new ForbiddenException('User not found');
+    }
+
+    if (!allowedRoles.includes(user.role)) {
+      throw new ForbiddenException('You do not have permission to perform this action');
+    }
+  }
 
   private async ensureNoOverlap(params: {
     doctorId: number;
@@ -362,7 +383,7 @@ export class AppointmentsService {
     }
   }
 
-  async create(createAppointmentDto: CreateAppointmentDto): Promise<Appointment> {
+  async create(createAppointmentDto: CreateAppointmentDto, userId?: string): Promise<Appointment> {
     const settings = await this.getSettings();
     // Validate that patient exists
     const patient = await this.patientRepository.findOne({
@@ -420,6 +441,8 @@ export class AppointmentsService {
         ...createAppointmentDto,
         start_datetime: startDate,
         end_datetime: endDate,
+        // created_by is nullable - null for public bookings, user_id for dashboard operations
+        created_by: userId || null,
       });
 
       return await this.appointmentRepository.save(appointment);
@@ -432,6 +455,7 @@ export class AppointmentsService {
 
   async createWithPatient(
     createDto: CreateAppointmentWithPatientDto,
+    userId?: string,
   ): Promise<Appointment> {
     // Find or create patient
     let patient: Patient | null;
@@ -494,7 +518,7 @@ export class AppointmentsService {
       notes: createDto.notes,
     };
 
-    return this.create(appointmentDto);
+    return this.create(appointmentDto, userId);
   }
 
   async findAll(filters?: AppointmentFilters): Promise<Appointment[]> {
@@ -572,6 +596,7 @@ export class AppointmentsService {
   async update(
     id: string,
     updateAppointmentDto: UpdateAppointmentDto,
+    userId?: string,
   ): Promise<Appointment> {
     const appointment = await this.findOne(id);
 
@@ -655,6 +680,8 @@ export class AppointmentsService {
       end_datetime: updateAppointmentDto.end_datetime
         ? new Date(updateAppointmentDto.end_datetime)
         : appointment.end_datetime,
+      // updated_by is nullable - null for public updates, user_id for dashboard operations
+      updated_by: userId || null,
     });
 
     try {
@@ -670,6 +697,7 @@ export class AppointmentsService {
   async updateStatus(
     id: string,
     status: AppointmentStatus,
+    userId?: string,
   ): Promise<Appointment> {
     const appointment = await this.findOne(id);
     const settings = await this.getSettings();
@@ -686,6 +714,8 @@ export class AppointmentsService {
       }
     }
     appointment.status = status;
+    // updated_by is nullable - null for public updates, user_id for dashboard operations
+    appointment.updated_by = userId || null;
 
     try {
       await this.appointmentRepository.save(appointment);
@@ -700,6 +730,36 @@ export class AppointmentsService {
   async remove(id: string): Promise<void> {
     const appointment = await this.findOne(id);
     await this.appointmentRepository.remove(appointment);
+  }
+
+  async autoCancelPastBookedAppointments(userId?: string): Promise<{ cancelled: number }> {
+    // Receptionist cannot use auto-cancel feature
+    // Only admin, manager, and appointment-manager can use it
+    await this.checkRolePermission(userId, [UserRole.ADMIN, UserRole.MANAGER]);
+    
+    const now = new Date();
+    
+    // Find all booked appointments that have passed their start time
+    const pastBookedAppointments = await this.appointmentRepository
+      .createQueryBuilder('appointment')
+      .where('appointment.status = :status', { status: AppointmentStatus.BOOKED })
+      .andWhere('appointment.start_datetime < :now', { now })
+      .getMany();
+
+    if (pastBookedAppointments.length === 0) {
+      return { cancelled: 0 };
+    }
+
+    // Update all past booked appointments to cancelled
+    const updateResult = await this.appointmentRepository
+      .createQueryBuilder()
+      .update(Appointment)
+      .set({ status: AppointmentStatus.CANCELLED })
+      .where('status = :status', { status: AppointmentStatus.BOOKED })
+      .andWhere('start_datetime < :now', { now })
+      .execute();
+
+    return { cancelled: updateResult.affected || 0 };
   }
 }
 

@@ -193,6 +193,27 @@ export function CreateAppointmentModal({
         return h1 * 60 + m1 - (h2 * 60 + m2);
       });
       
+      // Filter out past times if the selected date is today
+      const today = new Date();
+      const todayStr = format(today, "yyyy-MM-dd");
+      const now = new Date();
+      
+      if (form.date === todayStr) {
+        // Filter out times that have already passed
+        // Include the current time slot if it's available
+        const futureTimes = times.filter((time) => {
+          // Create a datetime for this specific time slot by combining date and time
+          // Time is already in HH:MM format, so we can use it directly
+          const slotDateTime = new Date(`${form.date}T${time}`);
+          // Include times that are in the future or exactly at the current time
+          return slotDateTime.getTime() >= now.getTime();
+        });
+        
+        // Debug: Log final times (after filtering past times)
+        console.log(`Available times for ${form.date} (after filtering past):`, futureTimes);
+        return futureTimes;
+      }
+      
       // Debug: Log final times
       console.log(`Available times for ${form.date}:`, times);
       return times;

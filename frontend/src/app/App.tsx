@@ -172,12 +172,28 @@ function AppContent() {
   ) => {
     // Find admin by email
     const name = email.split("@")[0] || "Admin";
+    
+    // Determine role based on email
+    let role: AdminRole = "super-admin";
+    if (email.includes("manager@")) {
+      role = "manager";
+    } else if (email.includes("receptionist@")) {
+      role = "receptionist";
+    } else if (email === "admin@skydentalclinic.com") {
+      role = "super-admin";
+    }
+    
+    // Set permissions based on role
+    const isSuperAdmin = role === "super-admin";
+    const isManager = role === "manager";
+    const isReceptionist = role === "receptionist";
+    
     const admin: Admin = {
       id: "admin-local",
       name,
       email,
       phone: "",
-      role: "super-admin",
+      role,
       status: "active",
       permissions: {
         dashboard: true,
@@ -187,16 +203,17 @@ function AppContent() {
         doctors: true,
         services: true,
         notifications: true,
-        settings: true,
-        adminManagement: true,
+        settings: isSuperAdmin, // Only super-admin can access settings
+        adminManagement: isSuperAdmin, // Only super-admin can manage admins
       },
       lastLogin: new Date().toISOString(),
       createdAt: new Date().toISOString(),
     };
     setCurrentAdmin(admin);
     setAuthPage("admin-dashboard");
+    const roleName = role === "super-admin" ? "Super Admin" : role === "manager" ? "Manager" : "Receptionist";
     toast.success(`Welcome back, ${admin.name}!`, {
-      description: `Logged in as Super Admin`,
+      description: `Logged in as ${roleName}`,
     });
   };
 
@@ -233,6 +250,7 @@ function AppContent() {
           <Dashboard
             onNavigate={handleNavigate}
             onCreateAppointment={handleCreateAppointment}
+            currentAdmin={currentAdmin}
           />
         );
       case "appointments":
@@ -241,20 +259,22 @@ function AppContent() {
             onCreateAppointment={handleCreateAppointment}
             selectedAppointmentId={pageData?.selectedId}
             refreshKey={appointmentsRefreshKey}
+            currentAdmin={currentAdmin}
           />
         );
       case "calendar":
         return (
           <CalendarView
             onCreateAppointment={handleCreateAppointment}
+            currentAdmin={currentAdmin}
           />
         );
       case "patients":
         return <Patients />;
       case "doctors":
-        return <Doctors />;
+        return <Doctors currentAdmin={currentAdmin} />;
       case "services":
-        return <Services />;
+        return <Services currentAdmin={currentAdmin} />;
       case "notifications":
         return <Notifications />;
       case "settings":

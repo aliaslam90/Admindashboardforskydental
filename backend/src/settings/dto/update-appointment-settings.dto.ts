@@ -35,5 +35,9 @@ export class UpdateAppointmentSettingsDto {
 
   @IsOptional()
   working_days?: string[];
+
+  @IsBoolean()
+  @IsOptional()
+  calendar_connected?: boolean;
 }
 

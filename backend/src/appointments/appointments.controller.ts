@@ -9,6 +9,7 @@ import {
   HttpCode,
   HttpStatus,
   Query,
+  Headers,
 } from '@nestjs/common';
 import { AppointmentsService } from './appointments.service';
 import { CreateAppointmentDto } from './dto/create-appointment.dto';
@@ -41,17 +42,22 @@ export class AppointmentsController {
 
   @Post()
   @HttpCode(HttpStatus.CREATED)
-  create(@Body() createAppointmentDto: CreateAppointmentDto) {
-    return this.appointmentsService.create(createAppointmentDto);
+  create(
+    @Body() createAppointmentDto: CreateAppointmentDto,
+    @Headers('x-user-id') userId?: string,
+  ) {
+    return this.appointmentsService.create(createAppointmentDto, userId);
   }
 
   @Post('with-patient')
   @HttpCode(HttpStatus.CREATED)
   createWithPatient(
     @Body() createAppointmentWithPatientDto: CreateAppointmentWithPatientDto,
+    @Headers('x-user-id') userId?: string,
   ) {
     return this.appointmentsService.createWithPatient(
       createAppointmentWithPatientDto,
+      userId,
     );
   }
 
@@ -85,22 +91,30 @@ export class AppointmentsController {
   update(
     @Param('id') id: string,
     @Body() updateAppointmentDto: UpdateAppointmentDto,
+    @Headers('x-user-id') userId?: string,
   ) {
-    return this.appointmentsService.update(id, updateAppointmentDto);
+    return this.appointmentsService.update(id, updateAppointmentDto, userId);
   }
 
   @Patch(':id/status')
   updateStatus(
     @Param('id') id: string,
     @Body('status') status: AppointmentStatus,
+    @Headers('x-user-id') userId?: string,
   ) {
-    return this.appointmentsService.updateStatus(id, status);
+    return this.appointmentsService.updateStatus(id, status, userId);
   }
 
   @Delete(':id')
   @HttpCode(HttpStatus.NO_CONTENT)
   remove(@Param('id') id: string) {
     return this.appointmentsService.remove(id);
+  }
+
+  @Post('auto-cancel-past')
+  @HttpCode(HttpStatus.OK)
+  autoCancelPastBooked(@Headers('x-user-id') userId?: string) {
+    return this.appointmentsService.autoCancelPastBookedAppointments(userId);
   }
 }
 

@@ -1,4 +1,4 @@
-import { Controller, Get, Patch, Body } from '@nestjs/common';
+import { Controller, Get, Patch, Body, Headers } from '@nestjs/common';
 import { SettingsService } from './settings.service';
 import { UpdateAppointmentSettingsDto } from './dto/update-appointment-settings.dto';
 
@@ -12,8 +12,11 @@ export class SettingsController {
   }
 
   @Patch()
-  update(@Body() dto: UpdateAppointmentSettingsDto) {
-    return this.settingsService.updateAppointmentSettings(dto);
+  update(
+    @Body() dto: UpdateAppointmentSettingsDto,
+    @Headers('x-user-id') userId?: string,
+  ) {
+    return this.settingsService.updateAppointmentSettings(dto, userId);
   }
 }
 
