@@ -10,6 +10,8 @@ import {
   HttpCode,
   HttpStatus,
   Query,
+  Headers,
+  BadRequestException,
 } from '@nestjs/common';
 import { DoctorsService } from './doctors.service';
 import { CreateDoctorDto } from './dto/create-doctor.dto';
@@ -23,8 +25,14 @@ export class DoctorsController {
 
   @Post()
   @HttpCode(HttpStatus.CREATED)
-  create(@Body() createDoctorDto: CreateDoctorDto) {
-    return this.doctorsService.create(createDoctorDto);
+  create(
+    @Body() createDoctorDto: CreateDoctorDto,
+    @Headers('x-user-id') userId?: string,
+  ) {
+    if (!userId) {
+      throw new BadRequestException('User ID is required');
+    }
+    return this.doctorsService.create(createDoctorDto, userId);
   }
 
   @Get()
@@ -46,8 +54,12 @@ export class DoctorsController {
   update(
     @Param('id', ParseIntPipe) id: number,
     @Body() updateDoctorDto: UpdateDoctorDto,
+    @Headers('x-user-id') userId?: string,
   ) {
-    return this.doctorsService.update(id, updateDoctorDto);
+    if (!userId) {
+      throw new BadRequestException('User ID is required');
+    }
+    return this.doctorsService.update(id, updateDoctorDto, userId);
   }
 
   @Delete(':id')
@@ -62,8 +74,12 @@ export class DoctorsController {
   addLeaveDate(
     @Param('id', ParseIntPipe) doctorId: number,
     @Body() leaveDto: CreateDoctorLeaveDto,
+    @Headers('x-user-id') userId?: string,
   ) {
-    return this.doctorsService.addLeaveDate(doctorId, leaveDto);
+    if (!userId) {
+      throw new BadRequestException('User ID is required');
+    }
+    return this.doctorsService.addLeaveDate(doctorId, leaveDto, userId);
   }
 
   @Delete('leave-dates/:leaveId')
@@ -76,7 +92,11 @@ export class DoctorsController {
   updateLeaveDate(
     @Param('leaveId', ParseIntPipe) leaveId: number,
     @Body() updateDto: UpdateDoctorLeaveDto,
+    @Headers('x-user-id') userId?: string,
   ) {
-    return this.doctorsService.updateLeaveDate(leaveId, updateDto);
+    if (!userId) {
+      throw new BadRequestException('User ID is required');
+    }
+    return this.doctorsService.updateLeaveDate(leaveId, updateDto, userId);
   }
 }

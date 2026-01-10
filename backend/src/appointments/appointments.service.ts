@@ -2,9 +2,10 @@ import {
   Injectable,
   NotFoundException,
   BadRequestException,
+  ForbiddenException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, Between, Like } from 'typeorm';
+import { Repository, Between, Like, Not } from 'typeorm';
 import { Appointment, AppointmentStatus } from './entities/appointment.entity';
 import { CreateAppointmentDto } from './dto/create-appointment.dto';
 import { CreateAppointmentWithPatientDto } from './dto/create-appointment-with-patient.dto';
@@ -12,6 +13,9 @@ import { UpdateAppointmentDto } from './dto/update-appointment.dto';
 import { Patient } from '../patients/entities/patient.entity';
 import { Doctor } from '../doctors/entities/doctor.entity';
 import { Service } from '../services/entities/service.entity';
+import { SettingsService } from '../settings/settings.service';
+import { AppointmentSettings } from '../settings/entities/appointment-settings.entity';
+import { User, UserRole } from '../users/entities/user.entity';
 
 export interface AppointmentFilters {
   search?: string;
@@ -34,21 +38,45 @@ export class AppointmentsService {
     private readonly doctorRepository: Repository<Doctor>,
     @InjectRepository(Service)
     private readonly serviceRepository: Repository<Service>,
+    @InjectRepository(User)
+    private readonly userRepository: Repository<User>,
+    private readonly settingsService: SettingsService,
   ) {}
+
+  private async checkRolePermission(userId?: string, allowedRoles: UserRole[] = [UserRole.ADMIN]): Promise<void> {
+    if (!userId) {
+      // If no userId provided, allow (for backward compatibility)
+      // In production, you should require authentication
+      return;
+    }
+
+    const user = await this.userRepository.findOne({ where: { id: userId } });
+    if (!user) {
+      throw new ForbiddenException('User not found');
+    }
+
+    if (!allowedRoles.includes(user.role)) {
+      throw new ForbiddenException('You do not have permission to perform this action');
+    }
+  }
 
   private async ensureNoOverlap(params: {
     doctorId: number;
     start: Date;
     end: Date;
+    bufferMinutes: number;
     excludeAppointmentId?: string;
   }) {
-    const { doctorId, start, end, excludeAppointmentId } = params;
+    const { doctorId, start, end, bufferMinutes, excludeAppointmentId } = params;
+
+    const bufferedStart = new Date(start.getTime() - bufferMinutes * 60 * 1000);
+    const bufferedEnd = new Date(end.getTime() + bufferMinutes * 60 * 1000);
 
     const qb = this.appointmentRepository
       .createQueryBuilder('appointment')
       .where('appointment.doctor_id = :doctorId', { doctorId })
-      .andWhere('appointment.start_datetime < :end', { end })
-      .andWhere('appointment.end_datetime > :start', { start })
+      .andWhere('appointment.start_datetime < :end', { end: bufferedEnd })
+      .andWhere('appointment.end_datetime > :start', { start: bufferedStart })
       .andWhere('appointment.status != :cancelled', {
         cancelled: AppointmentStatus.CANCELLED,
       });
@@ -62,12 +90,301 @@ export class AppointmentsService {
     const conflict = await qb.getOne();
     if (conflict) {
       throw new BadRequestException(
-        'Doctor already has an appointment during this time range',
+        'Doctor already has an appointment during this time range (includes buffer)',
       );
     }
   }
 
-  async create(createAppointmentDto: CreateAppointmentDto): Promise<Appointment> {
+  private async getSettings(): Promise<AppointmentSettings> {
+    return this.settingsService.getAppointmentSettings();
+  }
+
+  /**
+   * Compute available slots for a doctor & service based on:
+   * - Global appointment settings (working days, buffer)
+   * - Doctor-specific working_hours (supports multiple ranges per day / breaks)
+   * - Existing non-cancelled appointments
+   *
+   * This is used by the admin UI to only allow booking valid slots.
+   */
+  async getAvailability(params: {
+    doctorId: number;
+    serviceId: number;
+    from?: string;
+    days?: number;
+  }): Promise<
+    {
+      start: string;
+      end: string;
+    }[]
+  > {
+    const { doctorId, serviceId } = params;
+    const days = params.days ?? 30; // 1 month booking window
+    // Always start from today (ignore 'from' parameter to ensure 1-month booking window)
+    const today = new Date();
+    const from = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+
+    const settings = await this.getSettings();
+
+    // Ensure doctor & service exist
+    const doctor = await this.doctorRepository.findOne({
+      where: { id: doctorId },
+    });
+    if (!doctor) {
+      throw new NotFoundException(`Doctor with ID ${doctorId} not found`);
+    }
+
+    const service = await this.serviceRepository.findOne({
+      where: { id: serviceId },
+    });
+    if (!service) {
+      throw new NotFoundException(`Service with ID ${serviceId} not found`);
+    }
+
+    const durationMinutes = service.duration_minutes ?? 0;
+    if (durationMinutes <= 0) {
+      throw new BadRequestException(
+        'Service duration must be greater than 0 minutes',
+      );
+    }
+
+    // Calculate search window: from today (midnight) to exactly 30 days (1 month) in the future
+    // Use local time to match working hours
+    const searchStart = new Date(
+      from.getFullYear(),
+      from.getMonth(),
+      from.getDate(),
+      0,
+      0,
+      0,
+    );
+    const searchEnd = new Date(
+      searchStart.getTime() + (days - 1) * 24 * 60 * 60 * 1000,
+    );
+    // Set to end of the last day (23:59:59.999) in local time
+    searchEnd.setHours(23, 59, 59, 999);
+
+    // Load existing appointments for the doctor in the search window
+    const existing = await this.appointmentRepository.find({
+      where: {
+        doctor: { id: doctorId },
+        status: Not(AppointmentStatus.CANCELLED),
+        start_datetime: Between(searchStart, searchEnd),
+      },
+      order: { start_datetime: 'ASC' },
+    });
+
+    const toMinutes = (time: string) => {
+      const [h, m] = time.split(':').map(Number);
+      return h * 60 + m;
+    };
+    const bufferMinutes = settings.buffer_minutes ?? 0;
+    const slots: { start: string; end: string }[] = [];
+
+    const dayNames = [
+      'Sunday',
+      'Monday',
+      'Tuesday',
+      'Wednesday',
+      'Thursday',
+      'Friday',
+      'Saturday',
+    ];
+
+    const currentTime = new Date();
+
+    for (let i = 0; i < days; i++) {
+      const dayDate = new Date(searchStart.getTime() + i * 24 * 60 * 60 * 1000);
+
+      const dayName = dayNames[dayDate.getDay()];
+      if (!settings.working_days.includes(dayName)) {
+        continue;
+      }
+
+      const dayKey = dayName.toLowerCase();
+      const dayWorkingHours: { start: string; end: string }[] =
+        (doctor.working_hours?.[dayKey] as { start: string; end: string }[]) ??
+        [];
+
+      // DEBUG: Log doctor's working hours for this day
+      if (doctor.name === 'Dr. Emily Rodriguez' && dayName === 'Friday') {
+        console.log(`[DEBUG] Dr. Emily Rodriguez - Friday working_hours from DB:`, JSON.stringify(doctor.working_hours?.[dayKey]));
+        console.log(`[DEBUG] Parsed dayWorkingHours:`, JSON.stringify(dayWorkingHours));
+      }
+
+      // If doctor has no working hours for this day, skip (do NOT use global settings)
+      if (!Array.isArray(dayWorkingHours) || dayWorkingHours.length === 0) {
+        continue;
+      }
+
+      // For each working range for this day (supports breaks)
+      // This handles: single range (9am-5pm), multiple ranges (9am-12pm, 3pm-7pm), etc.
+      for (const range of dayWorkingHours) {
+        // Validate range structure
+        if (!range || typeof range.start !== 'string' || typeof range.end !== 'string') {
+          continue;
+        }
+
+        const rangeStartMinutes = toMinutes(range.start);
+        const rangeEndMinutes = toMinutes(range.end);
+
+        // DEBUG: Log range being processed
+        if (doctor.name === 'Dr. Emily Rodriguez' && dayName === 'Friday') {
+          console.log(`[DEBUG] Processing range: ${range.start} to ${range.end} (${rangeStartMinutes} to ${rangeEndMinutes} minutes)`);
+        }
+
+        // Skip invalid ranges
+        if (
+          isNaN(rangeStartMinutes) ||
+          isNaN(rangeEndMinutes) ||
+          rangeEndMinutes <= rangeStartMinutes
+        ) {
+          if (doctor.name === 'Dr. Emily Rodriguez' && dayName === 'Friday') {
+            console.log(`[DEBUG] Skipping invalid range`);
+          }
+          continue;
+        }
+
+        // Generate potential slots within this doctor-specific range
+        // Check every possible start time that fits within the range
+        // Step by a smaller increment to ensure we don't miss any valid slots
+        const stepMinutes = Math.min(durationMinutes, 15); // Step by service duration or 15min, whichever is smaller
+        for (
+          let minutes = rangeStartMinutes;
+          minutes + durationMinutes <= rangeEndMinutes;
+          minutes += stepMinutes
+        ) {
+          const hours = Math.floor(minutes / 60);
+          const mins = minutes % 60;
+
+          // Create date in local timezone (not UTC) to match working hours
+          // Use local date components to ensure correct timezone
+          const slotStart = new Date(
+            dayDate.getFullYear(),
+            dayDate.getMonth(),
+            dayDate.getDate(),
+            hours,
+            mins,
+          );
+          const slotEnd = new Date(
+            slotStart.getTime() + durationMinutes * 60 * 1000,
+          );
+
+          // CRITICAL: Verify slot end doesn't exceed the range end time
+          // Convert range end to a date for comparison
+          const rangeEndHours = Math.floor(rangeEndMinutes / 60);
+          const rangeEndMins = rangeEndMinutes % 60;
+          const rangeEndDate = new Date(
+            dayDate.getFullYear(),
+            dayDate.getMonth(),
+            dayDate.getDate(),
+            rangeEndHours,
+            rangeEndMins,
+          );
+
+          // Skip if slot end exceeds the range end time
+          if (slotEnd > rangeEndDate) {
+            continue;
+          }
+
+          // Do not propose slots in the past
+          if (slotEnd <= currentTime) {
+            continue;
+          }
+
+          // Check overlap with existing appointments including buffer
+          const hasConflict = existing.some((apt) => {
+            const aptStart = new Date(apt.start_datetime);
+            const aptEnd = new Date(apt.end_datetime);
+
+            const bufferedStart = new Date(
+              aptStart.getTime() - bufferMinutes * 60 * 1000,
+            );
+            const bufferedEnd = new Date(
+              aptEnd.getTime() + bufferMinutes * 60 * 1000,
+            );
+
+            return slotStart < bufferedEnd && slotEnd > bufferedStart;
+          });
+
+          if (!hasConflict) {
+            slots.push({
+              start: slotStart.toISOString(),
+              end: slotEnd.toISOString(),
+            });
+          }
+        }
+      }
+    }
+
+    return slots;
+  }
+
+  private validateWithinWorkingHours(
+    start: Date,
+    end: Date,
+    settings: AppointmentSettings,
+    doctor?: Doctor,
+  ) {
+    const dayNames = [
+      'Sunday',
+      'Monday',
+      'Tuesday',
+      'Wednesday',
+      'Thursday',
+      'Friday',
+      'Saturday',
+    ];
+    const dayName = dayNames[start.getUTCDay()];
+    if (!settings.working_days.includes(dayName)) {
+      throw new BadRequestException('Selected day is outside working days');
+    }
+
+    const toMinutes = (time: string) => {
+      const [h, m] = time.split(':').map(Number);
+      return h * 60 + m;
+    };
+
+    const startMinutes =
+      start.getUTCHours() * 60 + start.getUTCMinutes();
+    const endMinutes = end.getUTCHours() * 60 + end.getUTCMinutes();
+
+    // If doctor has specific working_hours configured for this day,
+    // ensure the appointment falls fully within one of the ranges.
+    const dayKey = dayName.toLowerCase();
+    const doctorDayRanges: { start: string; end: string }[] =
+      (doctor?.working_hours?.[dayKey] as { start: string; end: string }[]) ??
+      [];
+
+    if (Array.isArray(doctorDayRanges) && doctorDayRanges.length > 0) {
+      const withinDoctorRange = doctorDayRanges.some((range) => {
+        const rangeStartMinutes = toMinutes(range.start);
+        const rangeEndMinutes = toMinutes(range.end);
+        if (rangeEndMinutes <= rangeStartMinutes) return false;
+        return (
+          startMinutes >= rangeStartMinutes && endMinutes <= rangeEndMinutes
+        );
+      });
+
+      if (!withinDoctorRange) {
+        throw new BadRequestException(
+          'Appointment is outside doctor working hours for this day',
+        );
+      }
+      return;
+    }
+
+    // Fallback: use global clinic opening/closing if doctor-specific hours are not set
+    const openingMinutes = toMinutes(settings.opening_time);
+    const closingMinutes = toMinutes(settings.closing_time);
+
+    if (startMinutes < openingMinutes || endMinutes > closingMinutes) {
+      throw new BadRequestException('Appointment is outside working hours');
+    }
+  }
+
+  async create(createAppointmentDto: CreateAppointmentDto, userId?: string): Promise<Appointment> {
+    const settings = await this.getSettings();
     // Validate that patient exists
     const patient = await this.patientRepository.findOne({
       where: { id: createAppointmentDto.patient_id },
@@ -110,10 +427,13 @@ export class AppointmentsService {
       );
     }
 
+    this.validateWithinWorkingHours(startDate, endDate, settings, doctor);
+
     await this.ensureNoOverlap({
       doctorId: doctor.id,
       start: startDate,
       end: endDate,
+      bufferMinutes: settings.buffer_minutes ?? 0,
     });
 
     try {
@@ -121,6 +441,8 @@ export class AppointmentsService {
         ...createAppointmentDto,
         start_datetime: startDate,
         end_datetime: endDate,
+        // created_by is nullable - null for public bookings, user_id for dashboard operations
+        created_by: userId || null,
       });
 
       return await this.appointmentRepository.save(appointment);
@@ -133,6 +455,7 @@ export class AppointmentsService {
 
   async createWithPatient(
     createDto: CreateAppointmentWithPatientDto,
+    userId?: string,
   ): Promise<Appointment> {
     // Find or create patient
     let patient: Patient | null;
@@ -161,6 +484,21 @@ export class AppointmentsService {
           email: createDto.patient.email || '',
         });
         patient = await this.patientRepository.save(newPatient);
+      } else {
+        // Update existing patient's information if provided
+        // This ensures the patient name and email are up-to-date
+        let needsUpdate = false;
+        if (createDto.patient.full_name && patient.full_name !== createDto.patient.full_name) {
+          patient.full_name = createDto.patient.full_name;
+          needsUpdate = true;
+        }
+        if (createDto.patient.email && patient.email !== createDto.patient.email) {
+          patient.email = createDto.patient.email;
+          needsUpdate = true;
+        }
+        if (needsUpdate) {
+          patient = await this.patientRepository.save(patient);
+        }
       }
     }
 
@@ -180,7 +518,7 @@ export class AppointmentsService {
       notes: createDto.notes,
     };
 
-    return this.create(appointmentDto);
+    return this.create(appointmentDto, userId);
   }
 
   async findAll(filters?: AppointmentFilters): Promise<Appointment[]> {
@@ -258,6 +596,7 @@ export class AppointmentsService {
   async update(
     id: string,
     updateAppointmentDto: UpdateAppointmentDto,
+    userId?: string,
   ): Promise<Appointment> {
     const appointment = await this.findOne(id);
 
@@ -296,6 +635,7 @@ export class AppointmentsService {
     }
 
     // Validate datetime logic if dates are being updated
+    const settings = await this.getSettings();
     const startDate = updateAppointmentDto.start_datetime
       ? new Date(updateAppointmentDto.start_datetime)
       : appointment.start_datetime;
@@ -309,10 +649,25 @@ export class AppointmentsService {
       );
     }
 
+    // Load the doctor to evaluate doctor-specific working hours for that day
+    const doctorForValidation = await this.doctorRepository.findOne({
+      where: {
+        id: updateAppointmentDto.doctor_id || appointment.doctor_id,
+      },
+    });
+
+    this.validateWithinWorkingHours(
+      startDate,
+      endDate,
+      settings,
+      doctorForValidation ?? undefined,
+    );
+
     await this.ensureNoOverlap({
       doctorId: updateAppointmentDto.doctor_id || appointment.doctor_id,
       start: startDate,
       end: endDate,
+      bufferMinutes: settings.buffer_minutes ?? 0,
       excludeAppointmentId: id,
     });
 
@@ -325,6 +680,8 @@ export class AppointmentsService {
       end_datetime: updateAppointmentDto.end_datetime
         ? new Date(updateAppointmentDto.end_datetime)
         : appointment.end_datetime,
+      // updated_by is nullable - null for public updates, user_id for dashboard operations
+      updated_by: userId || null,
     });
 
     try {
@@ -340,9 +697,25 @@ export class AppointmentsService {
   async updateStatus(
     id: string,
     status: AppointmentStatus,
+    userId?: string,
   ): Promise<Appointment> {
     const appointment = await this.findOne(id);
+    const settings = await this.getSettings();
+    if (status === AppointmentStatus.CANCELLED) {
+      const now = new Date();
+      const cutoff = new Date(
+        appointment.start_datetime.getTime() -
+          (settings.cancellation_window_hours ?? 0) * 60 * 60 * 1000,
+      );
+      if (now > cutoff) {
+        throw new BadRequestException(
+          'Cancellation window has passed for this appointment',
+        );
+      }
+    }
     appointment.status = status;
+    // updated_by is nullable - null for public updates, user_id for dashboard operations
+    appointment.updated_by = userId || null;
 
     try {
       await this.appointmentRepository.save(appointment);
@@ -357,6 +730,36 @@ export class AppointmentsService {
   async remove(id: string): Promise<void> {
     const appointment = await this.findOne(id);
     await this.appointmentRepository.remove(appointment);
+  }
+
+  async autoCancelPastBookedAppointments(userId?: string): Promise<{ cancelled: number }> {
+    // Receptionist cannot use auto-cancel feature
+    // Only admin, manager, and appointment-manager can use it
+    await this.checkRolePermission(userId, [UserRole.ADMIN, UserRole.MANAGER]);
+    
+    const now = new Date();
+    
+    // Find all booked appointments that have passed their start time
+    const pastBookedAppointments = await this.appointmentRepository
+      .createQueryBuilder('appointment')
+      .where('appointment.status = :status', { status: AppointmentStatus.BOOKED })
+      .andWhere('appointment.start_datetime < :now', { now })
+      .getMany();
+
+    if (pastBookedAppointments.length === 0) {
+      return { cancelled: 0 };
+    }
+
+    // Update all past booked appointments to cancelled
+    const updateResult = await this.appointmentRepository
+      .createQueryBuilder()
+      .update(Appointment)
+      .set({ status: AppointmentStatus.CANCELLED })
+      .where('status = :status', { status: AppointmentStatus.BOOKED })
+      .andWhere('start_datetime < :now', { now })
+      .execute();
+
+    return { cancelled: updateResult.affected || 0 };
   }
 }
 

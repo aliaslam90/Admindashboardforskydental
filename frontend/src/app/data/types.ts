@@ -1,4 +1,4 @@
-// Mock data for Sky Dental Clinic Admin Dashboard
+// Type definitions and data models for Sky Dental Clinic Admin Dashboard
 
 export type AppointmentStatus = 'booked' | 'confirmed' | 'completed' | 'cancelled' | 'no-show' | 'checked-in';
 
@@ -102,7 +102,7 @@ export interface Notification {
   recipient: string;
 }
 
-export type AdminRole = 'super-admin' | 'appointment-manager';
+export type AdminRole = 'super-admin' | 'appointment-manager' | 'manager' | 'receptionist';
 
 export interface Admin {
   id: string;
@@ -507,10 +507,3 @@ export const mockAdmins: Admin[] = [
     createdAt: '2025-01-15T09:00:00Z'
   }
 ];
-
-// Helper functions
-export const getPatientById = (id: string) => mockPatients.find(p => p.id === id);
-export const getDoctorById = (id: string) => mockDoctors.find(d => d.id === id);
-export const getServiceById = (id: string) => mockServices.find(s => s.id === id);
-export const getAppointmentById = (id: string) => mockAppointments.find(a => a.id === id);
-export const getAdminById = (id: string) => mockAdmins.find(a => a.id === id);

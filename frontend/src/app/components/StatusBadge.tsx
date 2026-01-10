@@ -1,5 +1,5 @@
 import { Badge } from './ui/badge';
-import { AppointmentStatus } from '../data/mockData';
+import { AppointmentStatus } from '../data/types';
 
 interface StatusBadgeProps {
   status: AppointmentStatus;

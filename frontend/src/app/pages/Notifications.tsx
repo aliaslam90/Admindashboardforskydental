@@ -5,7 +5,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '.
 import { Badge } from '../components/ui/badge';
 import { Button } from '../components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../components/ui/tabs';
-import { mockNotifications, Notification } from '../data/mockData';
+import { mockNotifications, Notification } from '../data/types';
 import { toast } from 'sonner';
 
 export function Notifications() {

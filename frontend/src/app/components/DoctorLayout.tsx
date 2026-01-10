@@ -13,7 +13,7 @@ import {
 import { cn } from './ui/utils';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from './ui/dropdown-menu';
 import { NotificationCenter } from './NotificationCenter';
-import { Doctor } from '../data/mockData';
+import { Doctor } from '../data/types';
 
 interface DoctorLayoutProps {
   children: ReactNode;

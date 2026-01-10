@@ -9,6 +9,7 @@ import {
   ParseIntPipe,
   HttpCode,
   HttpStatus,
+  Headers,
 } from '@nestjs/common';
 import { ServicesService } from './services.service';
 import { CreateServiceDto } from './dto/create-service.dto';
@@ -20,8 +21,11 @@ export class ServicesController {
 
   @Post()
   @HttpCode(HttpStatus.CREATED)
-  create(@Body() createServiceDto: CreateServiceDto) {
-    return this.servicesService.create(createServiceDto);
+  create(
+    @Body() createServiceDto: CreateServiceDto,
+    @Headers('x-user-id') userId?: string,
+  ) {
+    return this.servicesService.create(createServiceDto, userId);
   }
 
   @Get()
@@ -38,8 +42,9 @@ export class ServicesController {
   update(
     @Param('id', ParseIntPipe) id: number,
     @Body() updateServiceDto: UpdateServiceDto,
+    @Headers('x-user-id') userId?: string,
   ) {
-    return this.servicesService.update(id, updateServiceDto);
+    return this.servicesService.update(id, updateServiceDto, userId);
   }
 
   @Delete(':id')

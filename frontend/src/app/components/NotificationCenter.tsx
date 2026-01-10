@@ -4,7 +4,7 @@ import { Button } from './ui/button';
 import { Badge } from './ui/badge';
 import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
 import { ScrollArea } from './ui/scroll-area';
-import { useData } from '../contexts/DataContext';
+import { useNotifications } from '../contexts/NotificationsContext';
 import { cn } from './ui/utils';
 
 interface NotificationCenterProps {
@@ -14,7 +14,7 @@ interface NotificationCenterProps {
 
 export function NotificationCenter({ userId, userType }: NotificationCenterProps) {
   const [isOpen, setIsOpen] = useState(false);
-  const { getNotifications, markNotificationAsRead, clearAllNotifications } = useData();
+  const { getNotifications, markNotificationAsRead, clearAllNotifications } = useNotifications();
   
   const notifications = getNotifications(userId, userType);
   const unreadCount = notifications.filter(n => !n.read).length;

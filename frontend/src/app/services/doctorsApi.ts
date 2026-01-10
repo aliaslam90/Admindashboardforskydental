@@ -1,5 +1,6 @@
 import { apiClient } from './api';
-import { Doctor, Service } from '../data/mockData';
+import { Doctor } from '../data/types';
+import type { Service } from './servicesApi';
 
 type WorkingHours = Record<string, { start: string; end: string }[]>;
 

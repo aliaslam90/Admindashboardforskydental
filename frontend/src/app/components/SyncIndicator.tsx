@@ -1,9 +1,9 @@
-import { useData } from '../contexts/DataContext';
+import { useSync } from '../contexts/SyncContext';
 import { Loader2, CheckCircle2, RefreshCw } from 'lucide-react';
 import { Button } from './ui/button';
 
 export function SyncIndicator() {
-  const { syncState, syncData } = useData();
+  const { syncState, syncData } = useSync();
 
   if (!syncState.isSyncing && !syncState.syncMessage && !syncState.lastSyncTime) {
     return null;

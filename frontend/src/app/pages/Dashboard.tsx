@@ -1,12 +1,12 @@
 import { useEffect, useState } from 'react';
-import { Calendar, Clock, CheckCircle2, XCircle, Plus } from 'lucide-react';
+import { Calendar, Clock, CheckCircle2, XCircle, Plus, RefreshCw } from 'lucide-react';
 import { KPICard } from '../components/KPICard';
 import { StatusBadge } from '../components/StatusBadge';
 import { Button } from '../components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../components/ui/table';
 import { Skeleton } from '../components/ui/skeleton';
-import { Appointment } from '../data/mockData';
+import { Appointment, Admin } from '../data/types';
 import { appointmentsApi } from '../services/appointmentsApi';
 import { toast } from 'sonner';
 import { CreateAppointmentPrefill } from '../components/CreateAppointmentModal';
@@ -14,12 +14,14 @@ import { CreateAppointmentPrefill } from '../components/CreateAppointmentModal';
 interface DashboardProps {
   onNavigate: (page: string, data?: any) => void;
   onCreateAppointment: (prefill?: CreateAppointmentPrefill) => void;
+  currentAdmin?: Admin | null;
 }
 
-export function Dashboard({ onNavigate, onCreateAppointment }: DashboardProps) {
+export function Dashboard({ onNavigate, onCreateAppointment, currentAdmin }: DashboardProps) {
   const [isLoading, setIsLoading] = useState(true);
   const [todayAppointments, setTodayAppointments] = useState<Appointment[]>([]);
   const [upcomingAppointments, setUpcomingAppointments] = useState<Appointment[]>([]);
+  const [isCancelling, setIsCancelling] = useState(false);
 
   useEffect(() => {
     const fetchData = async () => {
@@ -52,6 +54,40 @@ export function Dashboard({ onNavigate, onCreateAppointment }: DashboardProps) {
 
   const completedToday = todayAppointments.filter(apt => apt.status === 'completed');
   const cancelledToday = todayAppointments.filter(apt => apt.status === 'cancelled' || apt.status === 'no-show');
+  
+  const handleAutoCancelPast = async () => {
+    setIsCancelling(true);
+    try {
+      const result = await appointmentsApi.autoCancelPastBooked();
+      if (result.cancelled > 0) {
+        toast.success(`Successfully cancelled ${result.cancelled} past appointment${result.cancelled > 1 ? 's' : ''}`, {
+          description: 'Past booked appointments have been automatically cancelled'
+        });
+        // Refresh dashboard data
+        const todayStr = new Date().toISOString().split('T')[0];
+        const tomorrow = new Date();
+        tomorrow.setDate(tomorrow.getDate() + 1);
+  const nextWeek = new Date();
+  nextWeek.setDate(nextWeek.getDate() + 7);
+        const fmt = (d: Date) => d.toISOString().split('T')[0];
+        const [todayList, upcomingList] = await Promise.all([
+          appointmentsApi.getAll({ dateFrom: todayStr, dateTo: todayStr }),
+          appointmentsApi.getAll({ dateFrom: fmt(tomorrow), dateTo: fmt(nextWeek) }),
+        ]);
+        setTodayAppointments(todayList);
+        setUpcomingAppointments(upcomingList);
+      } else {
+        toast.info('No past booked appointments found to cancel', {
+          description: 'All appointments are up to date'
+        });
+      }
+    } catch (error) {
+      console.error('Failed to auto-cancel past appointments', error);
+      toast.error('Failed to cancel past appointments');
+    } finally {
+      setIsCancelling(false);
+    }
+  };
 
   return (
     <div className="space-y-6">
@@ -61,10 +97,23 @@ export function Dashboard({ onNavigate, onCreateAppointment }: DashboardProps) {
           <h1 className="text-2xl font-semibold text-gray-900">Dashboard</h1>
           <p className="text-sm text-gray-500 mt-1">Welcome back! Here's today's overview</p>
         </div>
-        <Button onClick={() => onCreateAppointment()}>
-          <Plus className="h-4 w-4 mr-2" />
-          Create Appointment
-        </Button>
+        <div className="flex items-center gap-2">
+          {currentAdmin?.role !== 'receptionist' && (
+            <Button 
+              variant="outline" 
+              onClick={handleAutoCancelPast}
+              disabled={isCancelling}
+              className="border-orange-200 text-orange-700 hover:bg-orange-50 hover:text-orange-800"
+            >
+              <RefreshCw className={`h-4 w-4 mr-2 ${isCancelling ? 'animate-spin' : ''}`} />
+              {isCancelling ? 'Cancelling...' : 'Cancel Past Appointments'}
+            </Button>
+          )}
+          <Button onClick={() => onCreateAppointment()}>
+            <Plus className="h-4 w-4 mr-2" />
+            Create Appointment
+          </Button>
+        </div>
       </div>
 
       {/* KPI Cards */}

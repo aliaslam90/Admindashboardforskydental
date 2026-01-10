@@ -4,7 +4,7 @@ import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from '
 import { Button } from './ui/button';
 import { StatusBadge } from './StatusBadge';
 import { Separator } from './ui/separator';
-import { Appointment, getPatientById } from '../data/mockData';
+import { Appointment } from '../data/types';
 import { toast } from 'sonner';
 
 interface AppointmentDrawerProps {
@@ -34,8 +34,6 @@ export function AppointmentDrawer({
 
   if (!appointment) return null;
 
-  const patient = getPatientById(appointment.patientId);
-
   const handleAction = async (action: () => void, successMessage: string) => {
     setIsProcessing(true);
     // Simulate API call
@@ -46,9 +44,20 @@ export function AppointmentDrawer({
     onClose();
   };
 
+  // Check if appointment date is today
+  const isToday = () => {
+    const today = new Date();
+    const appointmentDate = new Date(appointment.date);
+    return (
+      today.getFullYear() === appointmentDate.getFullYear() &&
+      today.getMonth() === appointmentDate.getMonth() &&
+      today.getDate() === appointmentDate.getDate()
+    );
+  };
+
   const canConfirm = appointment.status === 'booked';
-  const canCheckIn = appointment.status === 'confirmed' || appointment.status === 'booked';
-  const canComplete = appointment.status === 'checked-in' || appointment.status === 'confirmed';
+  const canCheckIn = (appointment.status === 'confirmed' || appointment.status === 'booked') && isToday();
+  const canComplete = appointment.status === 'checked-in' && isToday();
   const canReschedule = appointment.status === 'booked' || appointment.status === 'confirmed';
   const canCancel = appointment.status !== 'completed' && appointment.status !== 'cancelled' && appointment.status !== 'no-show';
   const canNoShow = appointment.status !== 'completed' && appointment.status !== 'cancelled' && appointment.status !== 'no-show';
@@ -91,21 +100,6 @@ export function AppointmentDrawer({
                 <User className="h-5 w-5 text-gray-400 mt-0.5" />
                 <div>
                   <p className="text-sm font-medium text-gray-900">{appointment.patientName}</p>
-                  {patient && (
-                    <div className="flex items-center gap-2 mt-1">
-                      <span className="text-xs text-gray-500">{patient.totalVisits} visits</span>
-                      {patient.flags.includes('vip') && (
-                        <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-yellow-100 text-yellow-800">
-                          VIP
-                        </span>
-                      )}
-                      {patient.flags.includes('no-show-risk') && (
-                        <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-orange-100 text-orange-800">
-                          No-show Risk
-                        </span>
-                      )}
-                    </div>
-                  )}
                 </div>
               </div>
 

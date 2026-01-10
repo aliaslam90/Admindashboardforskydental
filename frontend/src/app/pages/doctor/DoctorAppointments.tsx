@@ -10,11 +10,12 @@ import { Input } from '../../components/ui/input';
 import { Label } from '../../components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../../components/ui/select';
 import { Separator } from '../../components/ui/separator';
-import { Appointment, AppointmentStatus, Doctor, Medication, Service } from '../../data/mockData';
+import { Appointment, AppointmentStatus, Doctor, Medication } from '../../data/types';
 import { toast } from 'sonner';
 import { cn } from '../../components/ui/utils';
 import { appointmentsApi } from '../../services/appointmentsApi';
 import { doctorsApi } from '../../services/doctorsApi';
+import { servicesApi, Service } from '../../services/servicesApi';
 
 interface DoctorAppointmentsProps {
   currentDoctor: Doctor;
@@ -52,7 +53,7 @@ export function DoctorAppointments({ currentDoctor }: DoctorAppointmentsProps) {
     try {
       const [aptRes, svcRes] = await Promise.all([
         appointmentsApi.getAll({ doctorId: currentDoctor.id }),
-        doctorsApi.getServices(),
+        servicesApi.getAll(),
       ]);
       setAppointments(aptRes);
       setServices(svcRes);
@@ -245,6 +246,18 @@ export function DoctorAppointments({ currentDoctor }: DoctorAppointmentsProps) {
       });
       setDetailsOpen(false);
     }
+  };
+
+  // Check if appointment date is today
+  const isAppointmentToday = (appointment: Appointment | null): boolean => {
+    if (!appointment) return false;
+    const today = new Date();
+    const appointmentDate = new Date(appointment.date);
+    return (
+      today.getFullYear() === appointmentDate.getFullYear() &&
+      today.getMonth() === appointmentDate.getMonth() &&
+      today.getDate() === appointmentDate.getDate()
+    );
   };
 
   const AppointmentCard = ({ appointment }: { appointment: Appointment }) => (
@@ -741,7 +754,9 @@ export function DoctorAppointments({ currentDoctor }: DoctorAppointmentsProps) {
             <Button variant="outline" onClick={() => setDetailsOpen(false)}>
               Close
             </Button>
-            {selectedAppointment?.status !== 'completed' && (
+            {selectedAppointment?.status === 'checked-in' && 
+             selectedAppointment?.status !== 'completed' && 
+             isAppointmentToday(selectedAppointment) && (
               <Button onClick={handleMarkCompleted} className="bg-green-600 hover:bg-green-700">
                 <CheckCircle2 className="h-4 w-4 mr-2" />
                 Complete & Save

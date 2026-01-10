@@ -17,7 +17,7 @@ export class PatientsService {
     private readonly patientRepository: Repository<Patient>,
   ) {}
 
-  async create(createPatientDto: CreatePatientDto): Promise<Patient> {
+  async create(createPatientDto: CreatePatientDto, userId?: string): Promise<Patient> {
     try {
       // Check if phone number already exists
       const existingPatient = await this.patientRepository.findOne({
@@ -30,7 +30,11 @@ export class PatientsService {
         );
       }
 
-      const patient = this.patientRepository.create(createPatientDto);
+      const patient = this.patientRepository.create({
+        ...createPatientDto,
+        // created_by is nullable - null for public registration, user_id for dashboard operations
+        created_by: userId || null,
+      });
       return await this.patientRepository.save(patient);
     } catch (error) {
       if (error instanceof ConflictException) {
@@ -67,7 +71,7 @@ export class PatientsService {
     return patient;
   }
 
-  async update(id: string, updatePatientDto: UpdatePatientDto): Promise<Patient> {
+  async update(id: string, updatePatientDto: UpdatePatientDto, userId?: string): Promise<Patient> {
     const patient = await this.findOne(id);
 
     // Check if phone number is being updated and if it conflicts with another patient
@@ -87,7 +91,11 @@ export class PatientsService {
     }
 
     // Update patient fields
-    Object.assign(patient, updatePatientDto);
+    Object.assign(patient, {
+      ...updatePatientDto,
+      // updated_by is nullable - null for public updates, user_id for dashboard operations
+      updated_by: userId || null,
+    });
 
     try {
       return await this.patientRepository.save(patient);

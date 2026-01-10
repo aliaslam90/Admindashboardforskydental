@@ -9,12 +9,16 @@ import { Input } from '../components/ui/input';
 import { Label } from '../components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../components/ui/select';
 import { Switch } from '../components/ui/switch';
-import { Service } from '../data/mockData';
-import { doctorsApi } from '../services/doctorsApi';
+import { Service, servicesApi } from '../services/servicesApi';
 import { LoadingSpinner } from '../components/LoadingSpinner';
 import { toast } from 'sonner';
+import { Admin } from '../data/types';
 
-export function Services() {
+interface ServicesProps {
+  currentAdmin?: Admin | null;
+}
+
+export function Services({ currentAdmin }: ServicesProps) {
   const [services, setServices] = useState<Service[]>([]);
   const [editingService, setEditingService] = useState<Service | null>(null);
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -29,7 +33,7 @@ export function Services() {
   const fetchServices = async () => {
     setLoading(true);
     try {
-      const data = await doctorsApi.getServices();
+      const data = await servicesApi.getAll();
       setServices(data);
     } catch (error) {
       console.error('Failed to load services', error);
@@ -83,10 +87,10 @@ export function Services() {
 
     const action = async () => {
       if (exists) {
-        await doctorsApi.updateService(editingService.id, payload);
+        await servicesApi.update(editingService.id, payload);
         toast.success('Service updated successfully');
       } else {
-        await doctorsApi.createService(payload);
+        await servicesApi.create(payload);
         toast.success('Service created successfully');
       }
     };
@@ -106,7 +110,7 @@ export function Services() {
   const handleDelete = () => {
     if (!serviceToDelete) return;
 
-    doctorsApi.deleteService(serviceToDelete.id)
+    servicesApi.delete(serviceToDelete.id)
       .then(() => {
         toast.success('Service deleted successfully');
         fetchServices();
@@ -121,7 +125,7 @@ export function Services() {
 
   const handleToggleActive = (service: Service) => {
     const next = { ...service, active: !service.active };
-    doctorsApi.updateService(service.id, {
+    servicesApi.update(service.id, {
       active_status: next.active,
     })
       .then(() => {
@@ -150,10 +154,13 @@ export function Services() {
           <h1 className="text-2xl font-semibold text-gray-900">Services</h1>
           <p className="text-sm text-gray-500 mt-1">Manage services and slot durations</p>
         </div>
-        <Button onClick={handleCreateNew} className="bg-[rgb(203,255,143)] hover:bg-[#AEEF5A]">
-          <Plus className="h-4 w-4 mr-2" />
-          Add Service
-        </Button>
+        {(currentAdmin?.role === 'super-admin' || currentAdmin?.role === 'appointment-manager') && (
+          <Button onClick={handleCreateNew} className="bg-[rgb(203,255,143)] hover:bg-[#AEEF5A]">
+            <Plus className="h-4 w-4 mr-2" />
+            Add Service
+          </Button>
+        )}
+        {/* Note: Manager can edit services but not create new ones */}
       </div>
 
       {loading ? (
@@ -191,6 +198,7 @@ export function Services() {
                             <Switch
                               checked={service.active}
                               onCheckedChange={() => handleToggleActive(service)}
+                              disabled={currentAdmin?.role === 'receptionist'}
                             />
                             <Badge 
                               variant="secondary" 
@@ -204,25 +212,31 @@ export function Services() {
                           </div>
                         </TableCell>
                         <TableCell>
-                          <div className="flex gap-2">
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              onClick={() => handleEdit(service)}
-                            >
-                              <Edit className="h-4 w-4" />
-                            </Button>
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              onClick={() => {
-                                setServiceToDelete(service);
-                                setDeleteDialogOpen(true);
-                              }}
-                            >
-                              <Trash2 className="h-4 w-4 text-red-600" />
-                            </Button>
-                          </div>
+                          {(currentAdmin?.role === 'super-admin' || 
+                            currentAdmin?.role === 'appointment-manager' || 
+                            currentAdmin?.role === 'manager') && (
+                            <div className="flex gap-2">
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => handleEdit(service)}
+                              >
+                                <Edit className="h-4 w-4" />
+                              </Button>
+                              {(currentAdmin?.role === 'super-admin' || currentAdmin?.role === 'appointment-manager') && (
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  onClick={() => {
+                                    setServiceToDelete(service);
+                                    setDeleteDialogOpen(true);
+                                  }}
+                                >
+                                  <Trash2 className="h-4 w-4 text-red-600" />
+                                </Button>
+                              )}
+                            </div>
+                          )}
                         </TableCell>
                       </TableRow>
                     ))}

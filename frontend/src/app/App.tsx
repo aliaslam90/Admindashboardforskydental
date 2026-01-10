@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { Toaster } from "./components/ui/sonner";
-import { DataProvider } from "./contexts/DataContext";
+import { SyncProvider } from "./contexts/SyncContext";
+import { NotificationsProvider } from "./contexts/NotificationsContext";
 import { SyncIndicator } from "./components/SyncIndicator";
 import { DashboardLayout } from "./components/DashboardLayout";
 import { DoctorLayout } from "./components/DoctorLayout";
@@ -19,9 +20,10 @@ import { DoctorAppointments } from "./pages/doctor/DoctorAppointments";
 import { DoctorCalendarView } from "./pages/doctor/DoctorCalendarView";
 import { DoctorPatients } from "./pages/doctor/DoctorPatients";
 import { DoctorProfile } from "./pages/doctor/DoctorProfile";
-import { Admin, Doctor, Service } from "./data/mockData";
+import { Admin, Doctor } from "./data/types";
 import { toast } from "sonner";
 import { doctorsApi } from "./services/doctorsApi";
+import { servicesApi, Service } from "./services/servicesApi";
 import {
   CreateAppointmentModal,
   CreateAppointmentPrefill,
@@ -113,7 +115,7 @@ function AppContent() {
       try {
         const [doctors, services] = await Promise.all([
           doctorsApi.getAll(),
-          doctorsApi.getServices(),
+          servicesApi.getAll(),
         ]);
         setDoctorOptions(doctors);
         setServiceOptions(services);
@@ -170,12 +172,28 @@ function AppContent() {
   ) => {
     // Find admin by email
     const name = email.split("@")[0] || "Admin";
+    
+    // Determine role based on email
+    let role: AdminRole = "super-admin";
+    if (email.includes("manager@")) {
+      role = "manager";
+    } else if (email.includes("receptionist@")) {
+      role = "receptionist";
+    } else if (email === "admin@skydentalclinic.com") {
+      role = "super-admin";
+    }
+    
+    // Set permissions based on role
+    const isSuperAdmin = role === "super-admin";
+    const isManager = role === "manager";
+    const isReceptionist = role === "receptionist";
+    
     const admin: Admin = {
       id: "admin-local",
       name,
       email,
       phone: "",
-      role: "super-admin",
+      role,
       status: "active",
       permissions: {
         dashboard: true,
@@ -185,16 +203,17 @@ function AppContent() {
         doctors: true,
         services: true,
         notifications: true,
-        settings: true,
-        adminManagement: true,
+        settings: isSuperAdmin, // Only super-admin can access settings
+        adminManagement: isSuperAdmin, // Only super-admin can manage admins
       },
       lastLogin: new Date().toISOString(),
       createdAt: new Date().toISOString(),
     };
     setCurrentAdmin(admin);
     setAuthPage("admin-dashboard");
+    const roleName = role === "super-admin" ? "Super Admin" : role === "manager" ? "Manager" : "Receptionist";
     toast.success(`Welcome back, ${admin.name}!`, {
-      description: `Logged in as Super Admin`,
+      description: `Logged in as ${roleName}`,
     });
   };
 
@@ -231,6 +250,7 @@ function AppContent() {
           <Dashboard
             onNavigate={handleNavigate}
             onCreateAppointment={handleCreateAppointment}
+            currentAdmin={currentAdmin}
           />
         );
       case "appointments":
@@ -239,20 +259,22 @@ function AppContent() {
             onCreateAppointment={handleCreateAppointment}
             selectedAppointmentId={pageData?.selectedId}
             refreshKey={appointmentsRefreshKey}
+            currentAdmin={currentAdmin}
           />
         );
       case "calendar":
         return (
           <CalendarView
             onCreateAppointment={handleCreateAppointment}
+            currentAdmin={currentAdmin}
           />
         );
       case "patients":
         return <Patients />;
       case "doctors":
-        return <Doctors />;
+        return <Doctors currentAdmin={currentAdmin} />;
       case "services":
-        return <Services />;
+        return <Services currentAdmin={currentAdmin} />;
       case "notifications":
         return <Notifications />;
       case "settings":
@@ -345,22 +367,24 @@ function AppContent() {
         </DoctorLayout>
       )}
 
-      <CreateAppointmentModal
-        open={createAppointmentOpen}
-        onOpenChange={(open) => {
-          if (!open) {
-            setCreateAppointmentInitial(null);
-          }
-          setCreateAppointmentOpen(open);
-        }}
-        initialValues={createAppointmentInitial ?? undefined}
-        doctorOptions={doctorOptions}
-        serviceOptions={serviceOptions}
-        onCreated={() => {
-          setCurrentPage("appointments");
-          setAppointmentsRefreshKey((v) => v + 1);
-        }}
-      />
+      {authPage === "admin-dashboard" && (
+        <CreateAppointmentModal
+          open={createAppointmentOpen}
+          onOpenChange={(open) => {
+            if (!open) {
+              setCreateAppointmentInitial(null);
+            }
+            setCreateAppointmentOpen(open);
+          }}
+          initialValues={createAppointmentInitial ?? undefined}
+          doctorOptions={doctorOptions}
+          serviceOptions={serviceOptions}
+          onCreated={() => {
+            setCurrentPage("appointments");
+            setAppointmentsRefreshKey((v) => v + 1);
+          }}
+        />
+      )}
 
       <SyncIndicator />
       <Toaster position="top-right" />
@@ -370,8 +394,10 @@ function AppContent() {
 
 export default function App() {
   return (
-    <DataProvider>
-      <AppContent />
-    </DataProvider>
+    <SyncProvider>
+      <NotificationsProvider>
+        <AppContent />
+      </NotificationsProvider>
+    </SyncProvider>
   );
 }

@@ -1,4 +1,5 @@
-import { Appointment, AppointmentStatus, Service } from "../data/mockData";
+import { Appointment, AppointmentStatus } from "../data/types";
+import { Service } from "../services/servicesApi";
 import { appointmentsApi } from "../services/appointmentsApi";
 import { toast } from "sonner";
 

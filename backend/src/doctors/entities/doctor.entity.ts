@@ -40,6 +40,12 @@ export class Doctor {
   @OneToMany(() => DoctorLeave, (leave) => leave.doctor, { cascade: true })
   leave_dates: DoctorLeave[];
 
+  @Column({ type: 'uuid', nullable: true, name: 'created_by' })
+  created_by: string;
+
+  @Column({ type: 'uuid', nullable: true, name: 'updated_by' })
+  updated_by: string;
+
   @CreateDateColumn({ name: 'created_at' })
   created_at: Date;
 
