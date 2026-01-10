@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { User, Mail, Phone, BookOpen, Briefcase, FileText, Edit, Save, X } from 'lucide-react';
+import { Mail, Phone, BookOpen, Briefcase, FileText, Edit, Save, X } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '../../components/ui/card';
 import { Button } from '../../components/ui/button';
 import { Input } from '../../components/ui/input';

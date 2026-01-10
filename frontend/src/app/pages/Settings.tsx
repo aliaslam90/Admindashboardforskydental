@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Settings as SettingsIcon, Clock, Calendar, Shield, Link2, User, LogOut, Plus, Trash2, Edit, AlertTriangle } from 'lucide-react';
+import { Clock, Calendar, Shield, Link2, User, LogOut, Plus, Trash2, Edit } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../components/ui/card';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';

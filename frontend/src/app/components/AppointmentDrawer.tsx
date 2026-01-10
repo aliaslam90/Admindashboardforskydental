@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { X, Phone, Calendar, Clock, User, Stethoscope, ClipboardList, CheckCircle2, UserCheck, Ban, Edit, UserX } from 'lucide-react';
+import { Phone, Calendar, Clock, User, Stethoscope, ClipboardList, CheckCircle2, UserCheck, Ban, Edit, UserX } from 'lucide-react';
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from './ui/sheet';
 import { Button } from './ui/button';
 import { StatusBadge } from './StatusBadge';

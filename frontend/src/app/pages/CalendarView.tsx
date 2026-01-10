@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { ChevronLeft, ChevronRight, Plus, RefreshCw } from 'lucide-react';
 import { Button } from '../components/ui/button';
-import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card';
+import { Card, CardContent } from '../components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../components/ui/select';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '../components/ui/dialog';
 import { Input } from '../components/ui/input';
@@ -27,7 +27,7 @@ export function CalendarView({ onCreateAppointment, currentAdmin }: CalendarView
   const [appointments, setAppointments] = useState<Appointment[]>([]);
   const [doctorOptions, setDoctorOptions] = useState<Doctor[]>([]);
   const [serviceOptions, setServiceOptions] = useState<Service[]>([]);
-  const [isLoading, setIsLoading] = useState(false);
+  const [, setIsLoading] = useState(false);
   const [selectedAppointment, setSelectedAppointment] = useState<Appointment | null>(null);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [rescheduleOpen, setRescheduleOpen] = useState(false);
@@ -313,7 +313,7 @@ export function CalendarView({ onCreateAppointment, currentAdmin }: CalendarView
               {isCancelling ? 'Cancelling...' : 'Cancel Past Appointments'}
             </Button>
           )}
-          <Button onClick={onCreateAppointment} className="bg-[rgb(203,255,143)] hover:bg-[#AEEF5A]">
+          <Button onClick={() => onCreateAppointment()} className="bg-[rgb(203,255,143)] hover:bg-[#AEEF5A]">
             <Plus className="h-4 w-4 mr-2" />
             New Appointment
           </Button>

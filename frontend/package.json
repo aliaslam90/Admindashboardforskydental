@@ -10,7 +10,7 @@
     "build": "tsc -b && vite build",
     "preview": "vite preview",
     "test": "echo \"No test specified\" && exit 0",
-    "postinstall": "npm install --no-save @rollup/rollup-linux-arm64-gnu @rollup/rollup-linux-x64-gnu || true"
+    "postinstall": "npm install --no-save @rollup/rollup-linux-arm64-gnu @rollup/rollup-linux-x64-gnu 2>/dev/null || true"
   },
   "keywords": [],
   "author": "",

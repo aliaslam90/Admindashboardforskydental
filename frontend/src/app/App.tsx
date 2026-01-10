@@ -20,7 +20,7 @@ import { DoctorAppointments } from "./pages/doctor/DoctorAppointments";
 import { DoctorCalendarView } from "./pages/doctor/DoctorCalendarView";
 import { DoctorPatients } from "./pages/doctor/DoctorPatients";
 import { DoctorProfile } from "./pages/doctor/DoctorProfile";
-import { Admin, Doctor } from "./data/types";
+import { Admin, AdminRole, Doctor } from "./data/types";
 import { toast } from "sonner";
 import { doctorsApi } from "./services/doctorsApi";
 import { servicesApi, Service } from "./services/servicesApi";
@@ -185,8 +185,6 @@ function AppContent() {
     
     // Set permissions based on role
     const isSuperAdmin = role === "super-admin";
-    const isManager = role === "manager";
-    const isReceptionist = role === "receptionist";
     
     const admin: Admin = {
       id: "admin-local",
