@@ -9,6 +9,7 @@ import { PatientsModule } from './patients/patients.module';
 import { AppointmentsModule } from './appointments/appointments.module';
 import { UsersModule } from './users/users.module';
 import { SeedModule } from './seed/seed.module';
+import { SettingsModule } from './settings/settings.module';
 
 @Module({
   imports: [
@@ -37,6 +38,7 @@ import { SeedModule } from './seed/seed.module';
     AppointmentsModule,
     UsersModule,
     SeedModule,
+    SettingsModule,
   ],
   controllers: [AppController],
   providers: [AppService],

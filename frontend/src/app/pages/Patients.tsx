@@ -6,7 +6,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '.
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '../components/ui/dialog';
 import { Separator } from '../components/ui/separator';
 import { Badge } from '../components/ui/badge';
-import { Patient, Appointment } from '../data/mockData';
+import { Patient, Appointment } from '../data/types';
 import { StatusBadge } from '../components/StatusBadge';
 import { patientsApi } from '../services/patientsApi';
 import { appointmentsApi } from '../services/appointmentsApi';

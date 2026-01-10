@@ -4,7 +4,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '../../components/ui/ca
 import { Badge } from '../../components/ui/badge';
 import { Input } from '../../components/ui/input';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '../../components/ui/dialog';
-import { Appointment, Doctor, Patient } from '../../data/mockData';
+import { Appointment, Doctor, Patient } from '../../data/types';
 import { appointmentsApi } from '../../services/appointmentsApi';
 import { patientsApi } from '../../services/patientsApi';
 import { LoadingSpinner } from '../../components/LoadingSpinner';

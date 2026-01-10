@@ -9,6 +9,7 @@ import {
 export enum UserRole {
   PATIENT = 'patient',
   RECEPTIONIST = 'receptionist',
+  MANAGER = 'manager',
   ADMIN = 'admin',
   CONTENT_EDITOR = 'content_editor',
 }

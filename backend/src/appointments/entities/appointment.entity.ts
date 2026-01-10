@@ -67,6 +67,14 @@ export class Appointment {
   @JoinColumn({ name: 'service_id' })
   service: Service;
 
+  // Audit fields: nullable to support public booking (when created_by is null)
+  // and dashboard operations (when created_by/updated_by contain user_id)
+  @Column({ type: 'uuid', nullable: true, name: 'created_by' })
+  created_by: string | null;
+
+  @Column({ type: 'uuid', nullable: true, name: 'updated_by' })
+  updated_by: string | null;
+
   @CreateDateColumn({ name: 'created_at' })
   created_at: Date;
 

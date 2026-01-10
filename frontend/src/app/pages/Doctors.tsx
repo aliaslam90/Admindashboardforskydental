@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Stethoscope, Calendar, Clock, ChevronRight, Plus, Trash2, X, Edit, UserX } from 'lucide-react';
+import { Stethoscope, Calendar, Clock, ChevronRight, Plus, Trash2, X, Edit } from 'lucide-react';
 import { Button } from '../components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../components/ui/table';
@@ -12,19 +12,23 @@ import { Label } from '../components/ui/label';
 import { Checkbox } from '../components/ui/checkbox';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../components/ui/select';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../components/ui/tabs';
-import { Doctor, BlockedLeave, Service, Appointment } from '../data/mockData';
+import { Doctor, BlockedLeave, Appointment, Admin } from '../data/types';
 import { toast } from 'sonner';
 import { doctorsApi } from '../services/doctorsApi';
 import { appointmentsApi } from '../services/appointmentsApi';
+import { servicesApi, Service } from '../services/servicesApi';
 
 const daysOfWeek = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
 
-export function Doctors() {
+interface DoctorsProps {
+  currentAdmin?: Admin | null;
+}
+
+export function Doctors({ currentAdmin }: DoctorsProps) {
   const [selectedDoctor, setSelectedDoctor] = useState<Doctor | null>(null);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [formOpen, setFormOpen] = useState(false);
   const [formMode, setFormMode] = useState<'add' | 'edit'>('add');
-  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [toggleStatusDialogOpen, setToggleStatusDialogOpen] = useState(false);
   const [blockLeaveOpen, setBlockLeaveOpen] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -83,7 +87,7 @@ export function Doctors() {
       try {
         const [doctorsRes, servicesRes, appointmentsRes] = await Promise.all([
           doctorsApi.getAll(),
-          doctorsApi.getServices(),
+          servicesApi.getAll(),
           appointmentsApi.getAll(),
         ]);
         setDoctors(doctorsRes);
@@ -127,11 +131,6 @@ export function Doctors() {
       services: [...doctor.services],
       availability: JSON.parse(JSON.stringify(doctor.availability))
     });
-  };
-
-  const handleOpenDeleteDialog = (doctor: Doctor) => {
-    setSelectedDoctor(doctor);
-    setDeleteDialogOpen(true);
   };
 
   const handleOpenToggleStatusDialog = (doctor: Doctor) => {
@@ -287,6 +286,7 @@ export function Doctors() {
         specialization: doctorForm.specialization,
         services: doctorForm.services,
         availability: doctorForm.availability,
+        status: selectedDoctor.status, // Preserve current status
       });
       setDoctors((prev) => prev.map((d) => (d.id === selectedDoctor.id ? updated : d)));
       setSelectedDoctor(updated);
@@ -297,25 +297,6 @@ export function Doctors() {
     } catch (error) {
       console.error('Failed to update doctor', error);
       toast.error('Failed to update doctor');
-    } finally {
-      setIsSubmitting(false);
-    }
-  };
-
-  const handleDeleteDoctor = async () => {
-    if (!selectedDoctor) return;
-    setIsSubmitting(true);
-    try {
-      await doctorsApi.delete(selectedDoctor.id);
-      setDoctors((prev) => prev.filter((d) => d.id !== selectedDoctor.id));
-      toast.success('Doctor deleted successfully', {
-        description: `${selectedDoctor.name} has been removed from the system`
-      });
-      setDeleteDialogOpen(false);
-      setSelectedDoctor(null);
-    } catch (error) {
-      console.error('Failed to delete doctor', error);
-      toast.error('Failed to delete doctor');
     } finally {
       setIsSubmitting(false);
     }
@@ -397,10 +378,12 @@ export function Doctors() {
           <h1 className="text-2xl font-semibold text-gray-900">Doctors</h1>
           <p className="text-sm text-gray-500 mt-1">Manage doctor availability and information</p>
         </div>
-        <Button className="bg-[rgb(203,255,143)] hover:bg-[#AEEF5A]" onClick={handleOpenAddDoctor}>
-          <Plus className="h-4 w-4 mr-2" />
-          Add Doctor
-        </Button>
+        {currentAdmin?.role !== 'receptionist' && (
+          <Button className="bg-[rgb(203,255,143)] hover:bg-[#AEEF5A] text-[#0C0060]" onClick={handleOpenAddDoctor}>
+            <Plus className="h-4 w-4 mr-2" />
+            Add Doctor
+          </Button>
+        )}
       </div>
 
       {/* Doctors Grid */}
@@ -411,50 +394,50 @@ export function Doctors() {
           <div className="col-span-full text-sm text-gray-500">No doctors found.</div>
         ) : (
           doctors.map((doctor) => (
-            <Card 
-              key={doctor.id} 
-              className="cursor-pointer hover:shadow-lg transition-shadow"
-              onClick={() => handleOpenDoctor(doctor)}
-            >
-              <CardHeader>
-                <div className="flex items-start justify-between">
-                  <div className="flex items-center gap-3">
-                    <div className="w-12 h-12 rounded-full bg-blue-100 flex items-center justify-center">
-                      <Stethoscope className="h-6 w-6 text-blue-600" />
-                    </div>
-                    <div>
-                      <CardTitle className="text-base">{doctor.name}</CardTitle>
-                      <p className="text-sm text-gray-500 mt-0.5">{doctor.specialization}</p>
-                    </div>
-                  </div>
-                  <Badge 
-                    variant="secondary" 
-                    className={doctor.status === 'active' 
-                      ? 'bg-green-100 text-green-700 hover:bg-green-100' 
-                      : 'bg-gray-100 text-gray-700 hover:bg-gray-100'
-                    }
-                  >
-                    {doctor.status === 'active' ? 'Active' : 'Inactive'}
-                  </Badge>
-                </div>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-3">
-                  <div>
-                    <p className="text-xs text-gray-500 mb-2">Services Offered</p>
-                    <p className="text-sm text-gray-900">{getDoctorServices(doctor.services).length} services</p>
+          <Card 
+            key={doctor.id} 
+            className="cursor-pointer hover:shadow-lg transition-shadow"
+            onClick={() => handleOpenDoctor(doctor)}
+          >
+            <CardHeader>
+              <div className="flex items-start justify-between">
+                <div className="flex items-center gap-3">
+                  <div className="w-12 h-12 rounded-full bg-blue-100 flex items-center justify-center">
+                    <Stethoscope className="h-6 w-6 text-blue-600" />
                   </div>
                   <div>
-                    <p className="text-xs text-gray-500 mb-2">Working Days</p>
-                    <p className="text-sm text-gray-900">{doctor.availability.length} days/week</p>
-                  </div>
-                  <div className="flex items-center justify-between pt-2 border-t">
-                    <span className="text-sm text-blue-600">View Details</span>
-                    <ChevronRight className="h-4 w-4 text-blue-600" />
+                    <CardTitle className="text-base">{doctor.name}</CardTitle>
+                    <p className="text-sm text-gray-500 mt-0.5">{doctor.specialization}</p>
                   </div>
                 </div>
-              </CardContent>
-            </Card>
+                <Badge 
+                  variant="secondary" 
+                  className={doctor.status === 'active' 
+                    ? 'bg-green-100 text-green-700 hover:bg-green-100' 
+                    : 'bg-gray-100 text-gray-700 hover:bg-gray-100'
+                  }
+                >
+                  {doctor.status === 'active' ? 'Active' : 'Inactive'}
+                </Badge>
+              </div>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-3">
+                <div>
+                  <p className="text-xs text-gray-500 mb-2">Services Offered</p>
+                  <p className="text-sm text-gray-900">{getDoctorServices(doctor.services).length} services</p>
+                </div>
+                <div>
+                  <p className="text-xs text-gray-500 mb-2">Working Days</p>
+                  <p className="text-sm text-gray-900">{doctor.availability.length} days/week</p>
+                </div>
+                <div className="flex items-center justify-between pt-2 border-t">
+                  <span className="text-sm text-blue-600">View Details</span>
+                  <ChevronRight className="h-4 w-4 text-blue-600" />
+                </div>
+              </div>
+            </CardContent>
+          </Card>
           ))
         )}
       </div>
@@ -671,21 +654,16 @@ export function Doctors() {
               <Separator />
 
               {/* Actions */}
-              <div className="flex gap-2 justify-end">
-                <Button variant="outline" className="text-red-600 hover:text-red-700" onClick={() => {
-                  setDialogOpen(false);
-                  handleOpenToggleStatusDialog(selectedDoctor);
-                }}>
-                  {selectedDoctor.status === 'active' ? 'Deactivate' : 'Activate'}
-                </Button>
-                <Button variant="outline" className="text-red-600 hover:text-red-700" onClick={() => {
-                  setDialogOpen(false);
-                  handleOpenDeleteDialog(selectedDoctor);
-                }}>
-                  <UserX className="h-4 w-4 mr-2" />
-                  Delete Doctor
-                </Button>
-              </div>
+              {(currentAdmin?.role === 'super-admin' || currentAdmin?.role === 'manager') && (
+                <div className="flex gap-2 justify-end">
+                  <Button variant="outline" className="text-red-600 hover:text-red-700" onClick={() => {
+                    setDialogOpen(false);
+                    handleOpenToggleStatusDialog(selectedDoctor);
+                  }}>
+                    {selectedDoctor.status === 'active' ? 'Deactivate' : 'Activate'}
+                  </Button>
+                </div>
+              )}
             </div>
           )}
         </DialogContent>
@@ -713,30 +691,6 @@ export function Doctors() {
         handleRemoveTimeSlot={handleRemoveTimeSlot}
         handleUpdateTimeSlot={handleUpdateTimeSlot}
       />
-
-      {/* Delete Doctor Dialog */}
-      <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Are you absolutely sure?</AlertDialogTitle>
-            <AlertDialogDescription>
-              This action cannot be undone. Deleting this doctor will also cancel and delete all of their appointments. Are you sure you want to proceed?
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel onClick={() => setDeleteDialogOpen(false)}>
-              Cancel
-            </AlertDialogCancel>
-            <AlertDialogAction
-              className="bg-red-600 hover:bg-red-700 text-white"
-              onClick={handleDeleteDoctor}
-              disabled={isSubmitting}
-            >
-              {isSubmitting ? 'Deleting Doctor...' : 'Delete Doctor'}
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
 
       {/* Toggle Status Doctor Dialog */}
       <AlertDialog open={toggleStatusDialogOpen} onOpenChange={setToggleStatusDialogOpen}>
@@ -980,27 +934,27 @@ function DoctorFormDialog({
 
           {/* Services Offered */}
           <div>
-              <h3 className="text-sm font-medium text-gray-900 mb-3">Services Offered</h3>
-              <div className="grid gap-2 sm:grid-cols-2">
+            <h3 className="text-sm font-medium text-gray-900 mb-3">Services Offered</h3>
+            <div className="grid gap-2 sm:grid-cols-2">
                 {services.length === 0 ? (
                   <p className="text-sm text-gray-500">No services available</p>
                 ) : (
                   services.map(service => (
-                    <div key={service.id} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
-                      <div>
-                        <p className="text-sm font-medium text-gray-900">{service.name}</p>
-                        <p className="text-xs text-gray-500">{service.category}</p>
-                      </div>
-                      <div className="text-right">
-                        <Checkbox 
-                          checked={doctorForm.services.includes(service.id)}
-                          onCheckedChange={() => handleServiceToggle(service.id)}
-                        />
-                      </div>
-                    </div>
+                <div key={service.id} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+                  <div>
+                    <p className="text-sm font-medium text-gray-900">{service.name}</p>
+                    <p className="text-xs text-gray-500">{service.category}</p>
+                  </div>
+                  <div className="text-right">
+                    <Checkbox 
+                      checked={doctorForm.services.includes(service.id)}
+                      onCheckedChange={() => handleServiceToggle(service.id)}
+                    />
+                  </div>
+                </div>
                   ))
                 )}
-              </div>
+            </div>
           </div>
 
           <Separator />
@@ -1102,11 +1056,15 @@ function DoctorFormDialog({
             <Button variant="outline" onClick={() => onOpenChange(false)} disabled={isSubmitting}>
               Cancel
             </Button>
-            <Button
-              className={`${(isSubmitting || (isEdit && canSubmit))
-                ? 'bg-[#8AC92F] hover:bg-[#8AC92F] disabled:bg-[#8AC92F] disabled:opacity-100'
-                : 'bg-[rgb(203,255,143)] hover:bg-[rgb(203,255,143)] disabled:bg-[rgb(203,255,143)] disabled:opacity-80'
-              } text-white disabled:text-white disabled:cursor-not-allowed`}
+            <Button 
+              className={
+                isEdit 
+                  ? (canSubmit 
+                      ? 'bg-[#AEEF5A] hover:bg-[#AEEF5A] text-[#0C0060]'
+                      : 'bg-[rgb(203,255,143)] hover:bg-[rgb(203,255,143)] text-[#0C0060] disabled:bg-[rgb(203,255,143)] disabled:opacity-60 disabled:cursor-not-allowed'
+                    )
+                  : 'bg-[rgb(203,255,143)] hover:bg-[#AEEF5A] text-[#0C0060]'
+              }
               onClick={onSubmit}
               disabled={isSubmitting || !canSubmit}
             >

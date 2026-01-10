@@ -7,6 +7,7 @@ import { DoctorLeave } from '../doctors/entities/doctor-leave.entity';
 import { User, UserRole } from '../users/entities/user.entity';
 import { Patient } from '../patients/entities/patient.entity';
 import { Appointment, AppointmentStatus } from '../appointments/entities/appointment.entity';
+import { AppointmentSettings } from '../settings/entities/appointment-settings.entity';
 import * as bcrypt from 'bcrypt';
 
 @Injectable()
@@ -26,6 +27,8 @@ export class SeedService implements OnModuleInit {
     private readonly patientRepository: Repository<Patient>,
     @InjectRepository(Appointment)
     private readonly appointmentRepository: Repository<Appointment>,
+    @InjectRepository(AppointmentSettings)
+    private readonly settingsRepository: Repository<AppointmentSettings>,
   ) {}
 
   async onModuleInit() {
@@ -56,6 +59,7 @@ export class SeedService implements OnModuleInit {
   async seedAll() {
     this.logger.log('Starting database seeding...');
     try {
+      await this.seedAppointmentSettings();
       await this.seedAdminUser();
       await this.seedServices();
       await this.seedDoctors();
@@ -63,6 +67,35 @@ export class SeedService implements OnModuleInit {
       this.logger.log('Database seeding completed successfully');
     } catch (error) {
       this.logger.error(`Error during seeding: ${error.message}`, error.stack);
+    }
+  }
+
+  private async seedAppointmentSettings() {
+    this.logger.log('Seeding Appointment Settings...');
+    let settings = await this.settingsRepository.findOne({ where: { id: 1 } });
+    if (!settings) {
+      settings = this.settingsRepository.create({
+        id: 1,
+        buffer_minutes: 15,
+        cancellation_window_hours: 24,
+        otp_required: false,
+        otp_expiry_minutes: 5,
+        opening_time: '09:00',
+        closing_time: '18:00',
+        working_days: [
+          'Sunday',
+          'Monday',
+          'Tuesday',
+          'Wednesday',
+          'Thursday',
+          'Friday',
+          'Saturday',
+        ],
+      });
+      await this.settingsRepository.save(settings);
+      this.logger.log('Appointment settings seeded with defaults (OTP off).');
+    } else {
+      this.logger.log('Appointment settings already exist. Skipping.');
     }
   }
 
@@ -192,10 +225,13 @@ export class SeedService implements OnModuleInit {
       if (!doc.name) continue;
       const existing = await this.doctorRepository.findOne({ where: { name: doc.name } });
       if (existing) {
+        // Only update fields that don't affect user changes
         existing.specialization = doc.specialization ?? existing.specialization;
-        existing.status = (doc.status as any) ?? existing.status;
+        // Don't update status - preserve user's changes
+        // existing.status = (doc.status as any) ?? existing.status;
         existing.services_offered = doc.services_offered ?? existing.services_offered;
-        existing.working_hours = doc.working_hours ?? existing.working_hours;
+        // Don't update working_hours - preserve user's changes
+        // existing.working_hours = doc.working_hours ?? existing.working_hours;
         await this.doctorRepository.save(existing);
       } else {
         const newDoc = this.doctorRepository.create(doc);

@@ -16,7 +16,7 @@ import image_6ed9d1dbe20e8b3479eed332bf1c51ffbc9e9f7c from '../../assets/6ed9d1d
 import { cn } from './ui/utils';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from './ui/dropdown-menu';
 import { NotificationCenter } from './NotificationCenter';
-import { Admin } from '../data/mockData';
+import { Admin } from '../data/types';
 import { ImageWithFallback } from './figma/ImageWithFallback';
 
 interface DashboardLayoutProps {
@@ -27,16 +27,24 @@ interface DashboardLayoutProps {
   onLogout: () => void;
 }
 
-const navigation = [
-  { name: 'Dashboard', icon: LayoutDashboard, id: 'dashboard' },
-  { name: 'Appointments', icon: Calendar, id: 'appointments' },
-  { name: 'Calendar', icon: Calendar, id: 'calendar' },
-  { name: 'Patients', icon: Users, id: 'patients' },
-  { name: 'Doctors', icon: Stethoscope, id: 'doctors' },
-  { name: 'Services', icon: Briefcase, id: 'services' },
-  { name: 'Notifications', icon: Bell, id: 'notifications' },
-  { name: 'Settings', icon: Settings, id: 'settings' },
-];
+const getNavigation = (currentAdmin?: Admin) => {
+  const baseNavigation = [
+    { name: 'Dashboard', icon: LayoutDashboard, id: 'dashboard' },
+    { name: 'Appointments', icon: Calendar, id: 'appointments' },
+    { name: 'Calendar', icon: Calendar, id: 'calendar' },
+    { name: 'Patients', icon: Users, id: 'patients' },
+    { name: 'Doctors', icon: Stethoscope, id: 'doctors' },
+    { name: 'Services', icon: Briefcase, id: 'services' },
+    { name: 'Notifications', icon: Bell, id: 'notifications' },
+  ];
+  
+  // Only show Settings for super-admin
+  if (currentAdmin?.role === 'super-admin') {
+    baseNavigation.push({ name: 'Settings', icon: Settings, id: 'settings' });
+  }
+  
+  return baseNavigation;
+};
 
 export function DashboardLayout({ children, currentPage, onNavigate, currentAdmin, onLogout }: DashboardLayoutProps) {
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -78,7 +86,7 @@ export function DashboardLayout({ children, currentPage, onNavigate, currentAdmi
           {/* Navigation */}
           <nav className="flex-1 px-3 py-4 overflow-y-auto">
             <div className="space-y-1">
-              {navigation.map((item) => {
+              {getNavigation(currentAdmin).map((item) => {
                 const isActive = currentPage === item.id;
                 return (
                   <button
@@ -145,7 +153,9 @@ export function DashboardLayout({ children, currentPage, onNavigate, currentAdmi
                       <div className="text-left hidden md:block">
                         <p className="text-sm font-medium text-gray-900">{currentAdmin.name}</p>
                         <p className="text-xs text-gray-500">
-                          {currentAdmin.role === 'super-admin' ? 'Super Admin' : 'Appointment Manager'}
+                          {currentAdmin.role === 'super-admin' ? 'Super Admin' : 
+                           currentAdmin.role === 'manager' ? 'Manager' :
+                           currentAdmin.role === 'receptionist' ? 'Receptionist' : 'Appointment Manager'}
                         </p>
                       </div>
                       <ChevronDown className="h-4 w-4 text-gray-500 hidden md:block" />
@@ -157,11 +167,15 @@ export function DashboardLayout({ children, currentPage, onNavigate, currentAdmi
                           <p className="text-xs text-gray-500">{currentAdmin.email}</p>
                         </div>
                       </DropdownMenuLabel>
-                      <DropdownMenuSeparator />
-                      <DropdownMenuItem onClick={() => onNavigate('settings')}>
-                        <Settings className="h-4 w-4 mr-2" />
-                        Settings
-                      </DropdownMenuItem>
+                      {currentAdmin.role === 'super-admin' && (
+                        <>
+                          <DropdownMenuSeparator />
+                          <DropdownMenuItem onClick={() => onNavigate('settings')}>
+                            <Settings className="h-4 w-4 mr-2" />
+                            Settings
+                          </DropdownMenuItem>
+                        </>
+                      )}
                       <DropdownMenuSeparator />
                       <DropdownMenuItem 
                         onClick={onLogout}

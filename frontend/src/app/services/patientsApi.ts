@@ -1,5 +1,5 @@
 import { apiClient } from './api';
-import { Patient } from '../data/mockData';
+import { Patient } from '../data/types';
 
 interface BackendPatient {
   id: string;
