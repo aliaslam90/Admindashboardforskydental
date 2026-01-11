@@ -755,7 +755,6 @@ export function DoctorAppointments({ currentDoctor }: DoctorAppointmentsProps) {
               Close
             </Button>
             {selectedAppointment?.status === 'checked-in' && 
-             selectedAppointment?.status !== 'completed' && 
              isAppointmentToday(selectedAppointment) && (
               <Button onClick={handleMarkCompleted} className="bg-green-600 hover:bg-green-700">
                 <CheckCircle2 className="h-4 w-4 mr-2" />

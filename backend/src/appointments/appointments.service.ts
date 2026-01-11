@@ -16,6 +16,7 @@ import { Service } from '../services/entities/service.entity';
 import { SettingsService } from '../settings/settings.service';
 import { AppointmentSettings } from '../settings/entities/appointment-settings.entity';
 import { User, UserRole } from '../users/entities/user.entity';
+import { CalendarService } from '../calendar/calendar.service';
 
 export interface AppointmentFilters {
   search?: string;
@@ -41,6 +42,7 @@ export class AppointmentsService {
     @InjectRepository(User)
     private readonly userRepository: Repository<User>,
     private readonly settingsService: SettingsService,
+    private readonly calendarService: CalendarService,
   ) {}
 
   private async checkRolePermission(userId?: string, allowedRoles: UserRole[] = [UserRole.ADMIN]): Promise<void> {
@@ -112,6 +114,7 @@ export class AppointmentsService {
     serviceId: number;
     from?: string;
     days?: number;
+    excludeAppointmentId?: string;
   }): Promise<
     {
       start: string;
@@ -165,7 +168,7 @@ export class AppointmentsService {
     searchEnd.setHours(23, 59, 59, 999);
 
     // Load existing appointments for the doctor in the search window
-    const existing = await this.appointmentRepository.find({
+    const existingAppointments = await this.appointmentRepository.find({
       where: {
         doctor: { id: doctorId },
         status: Not(AppointmentStatus.CANCELLED),
@@ -173,6 +176,11 @@ export class AppointmentsService {
       },
       order: { start_datetime: 'ASC' },
     });
+
+    // Exclude the appointment being rescheduled (if provided)
+    const existing = params.excludeAppointmentId
+      ? existingAppointments.filter(apt => apt.id !== params.excludeAppointmentId)
+      : existingAppointments;
 
     const toMinutes = (time: string) => {
       const [h, m] = time.split(':').map(Number);
@@ -205,12 +213,6 @@ export class AppointmentsService {
       const dayWorkingHours: { start: string; end: string }[] =
         (doctor.working_hours?.[dayKey] as { start: string; end: string }[]) ??
         [];
-
-      // DEBUG: Log doctor's working hours for this day
-      if (doctor.name === 'Dr. Emily Rodriguez' && dayName === 'Friday') {
-        console.log(`[DEBUG] Dr. Emily Rodriguez - Friday working_hours from DB:`, JSON.stringify(doctor.working_hours?.[dayKey]));
-        console.log(`[DEBUG] Parsed dayWorkingHours:`, JSON.stringify(dayWorkingHours));
-      }
 
       // If doctor has no working hours for this day, skip (do NOT use global settings)
       if (!Array.isArray(dayWorkingHours) || dayWorkingHours.length === 0) {
@@ -445,7 +447,22 @@ export class AppointmentsService {
         created_by: userId || null,
       });
 
-      return await this.appointmentRepository.save(appointment);
+      const savedAppointment = await this.appointmentRepository.save(appointment);
+
+      // Sync with Google Calendar if connected
+      try {
+        const settings = await this.getSettings();
+        if (settings.calendar_connected) {
+          const eventId = await this.calendarService.createEvent(savedAppointment);
+          savedAppointment.calendar_event_id = eventId;
+          await this.appointmentRepository.save(savedAppointment);
+        }
+      } catch (calendarError) {
+        console.error('Failed to sync appointment with calendar:', calendarError);
+        // Don't fail the appointment creation if calendar sync fails
+      }
+
+      return savedAppointment;
     } catch (error) {
       throw new BadRequestException(
         `Failed to create appointment: ${error.message}`,
@@ -686,7 +703,20 @@ export class AppointmentsService {
 
     try {
       await this.appointmentRepository.save(appointment);
-      return this.findOne(id);
+      const updatedAppointment = await this.findOne(id);
+
+      // Sync with Google Calendar if connected
+      try {
+        const settings = await this.getSettings();
+        if (settings.calendar_connected) {
+          await this.calendarService.updateEvent(updatedAppointment);
+        }
+      } catch (calendarError) {
+        console.error('Failed to sync appointment with calendar:', calendarError);
+        // Don't fail the appointment update if calendar sync fails
+      }
+
+      return updatedAppointment;
     } catch (error) {
       throw new BadRequestException(
         `Failed to update appointment: ${error.message}`,
@@ -719,7 +749,28 @@ export class AppointmentsService {
 
     try {
       await this.appointmentRepository.save(appointment);
-      return this.findOne(id);
+      const updatedAppointment = await this.findOne(id);
+
+      // Sync with Google Calendar if connected
+      try {
+        const settings = await this.getSettings();
+        if (settings.calendar_connected) {
+          if (status === AppointmentStatus.CANCELLED || status === AppointmentStatus.NO_SHOW) {
+            // Delete event from calendar when cancelled or no-show
+            if (updatedAppointment.calendar_event_id) {
+              await this.calendarService.deleteEvent(updatedAppointment);
+            }
+          } else {
+            // Update event for other status changes
+            await this.calendarService.updateEvent(updatedAppointment);
+          }
+        }
+      } catch (calendarError) {
+        console.error('Failed to sync appointment status with calendar:', calendarError);
+        // Don't fail the status update if calendar sync fails
+      }
+
+      return updatedAppointment;
     } catch (error) {
       throw new BadRequestException(
         `Failed to update appointment status: ${error.message}`,
@@ -729,6 +780,18 @@ export class AppointmentsService {
 
   async remove(id: string): Promise<void> {
     const appointment = await this.findOne(id);
+
+    // Delete from Google Calendar if connected
+    try {
+      const settings = await this.getSettings();
+      if (settings.calendar_connected && appointment.calendar_event_id) {
+        await this.calendarService.deleteEvent(appointment);
+      }
+    } catch (calendarError) {
+      console.error('Failed to delete appointment from calendar:', calendarError);
+      // Don't fail the appointment deletion if calendar sync fails
+    }
+
     await this.appointmentRepository.remove(appointment);
   }
 

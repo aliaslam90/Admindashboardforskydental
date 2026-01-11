@@ -39,5 +39,9 @@ export class UpdateAppointmentSettingsDto {
   @IsBoolean()
   @IsOptional()
   calendar_connected?: boolean;
+
+  @IsString()
+  @IsOptional()
+  calendar_calendar_id?: string;
 }
 

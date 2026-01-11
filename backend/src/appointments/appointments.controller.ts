@@ -27,6 +27,7 @@ export class AppointmentsController {
     @Query('serviceId') serviceId?: string,
     @Query('from') from?: string,
     @Query('days') days?: string,
+    @Query('excludeAppointmentId') excludeAppointmentId?: string,
   ) {
     if (!doctorId || !serviceId) {
       // Using a simple error here; in real usage you might want BadRequestException
@@ -37,6 +38,7 @@ export class AppointmentsController {
       serviceId: parseInt(serviceId, 10),
       from,
       days: days ? parseInt(days, 10) : undefined,
+      excludeAppointmentId,
     });
   }
 

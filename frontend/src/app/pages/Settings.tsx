@@ -15,6 +15,7 @@ import { Admin, AdminRole } from '../data/types';
 import { toast } from 'sonner';
 import { settingsApi } from '../services/settingsApi';
 import { usersApi } from '../services/usersApi';
+import { calendarApi } from '../services/calendarApi';
 
 interface SettingsProps {
   currentAdmin?: Admin;
@@ -74,9 +75,10 @@ export function Settings({ currentAdmin, onLogout }: SettingsProps) {
     const loadSettings = async () => {
       try {
         setIsLoadingSettings(true);
-        const [settings, users] = await Promise.all([
+        const [settings, users, calendarStatus] = await Promise.all([
           settingsApi.getAppointmentSettings(),
           usersApi.getAll(),
+          calendarApi.getStatus().catch(() => ({ connected: false, configured: false })),
         ]);
         
         setBufferTime(settings.buffer_minutes.toString());
@@ -86,7 +88,8 @@ export function Settings({ currentAdmin, onLogout }: SettingsProps) {
         setOpeningTime(settings.opening_time || '09:00');
         setClosingTime(settings.closing_time || '18:00');
         setWorkingDays(settings.working_days || ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday']);
-        setCalendarConnected(settings.calendar_connected ?? false);
+        // Use calendar API status instead of settings flag
+        setCalendarConnected(calendarStatus.connected ?? false);
         
         // Convert backend users to Admin format for display
         const adminUsers: Admin[] = users
@@ -200,25 +203,84 @@ export function Settings({ currentAdmin, onLogout }: SettingsProps) {
     setConfirmDialog({ open: true, type: 'calendar' });
   };
 
-  const handleSaveCalendarConnection = async (connected: boolean) => {
+  const handleConnectCalendar = async () => {
     try {
       setIsSubmitting(true);
-      await settingsApi.updateAppointmentSettings({
-        calendar_connected: connected,
-      });
-      setCalendarConnected(connected);
-      toast.success(connected ? 'Calendar connected' : 'Calendar disconnected', {
-        description: connected 
-          ? 'New appointments will sync with your calendar'
-          : 'New appointments will no longer sync'
-      });
+      // Get OAuth URL from backend
+      const { url } = await calendarApi.getAuthUrl();
+      // Redirect user to Google OAuth
+      window.location.href = url;
     } catch (error) {
-      console.error('Failed to update calendar connection', error);
-      toast.error('Failed to update calendar connection');
+      console.error('Failed to get OAuth URL', error);
+      toast.error('Failed to connect calendar', {
+        description: error instanceof Error ? error.message : 'Could not initiate Google Calendar connection'
+      });
+      setIsSubmitting(false);
+    }
+  };
+
+  const handleDisconnectCalendarConfirm = async () => {
+    try {
+      setIsSubmitting(true);
+      await calendarApi.disconnect();
+      setCalendarConnected(false);
+      toast.success('Calendar disconnected', {
+        description: 'New appointments will no longer sync with Google Calendar'
+      });
+      setConfirmDialog(null);
+    } catch (error) {
+      console.error('Failed to disconnect calendar', error);
+      toast.error('Failed to disconnect calendar', {
+        description: error instanceof Error ? error.message : 'An error occurred'
+      });
     } finally {
       setIsSubmitting(false);
     }
   };
+
+  // Handle OAuth callback when user returns from Google
+  useEffect(() => {
+    const urlParams = new URLSearchParams(window.location.search);
+    const code = urlParams.get('code');
+
+    if (code) {
+      // Remove code from URL
+      window.history.replaceState({}, document.title, window.location.pathname);
+
+      // Call backend callback endpoint
+      const handleCallback = async () => {
+        try {
+          setIsSubmitting(true);
+          const response = await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:3001/api'}/calendar/callback?code=${code}`);
+
+          if (response.ok) {
+            const result = await response.json();
+            if (result.success) {
+              setCalendarConnected(true);
+              toast.success('Calendar connected successfully', {
+                description: 'Your appointments will now sync with Google Calendar'
+              });
+              // Refresh calendar status
+              const status = await calendarApi.getStatus();
+              setCalendarConnected(status.connected);
+            }
+          } else {
+            throw new Error('Failed to complete authentication');
+          }
+        } catch (error) {
+          console.error('Failed to handle OAuth callback', error);
+          toast.error('Failed to connect calendar', {
+            description: error instanceof Error ? error.message : 'Authentication failed'
+          });
+          setCalendarConnected(false);
+        } finally {
+          setIsSubmitting(false);
+        }
+      };
+
+      handleCallback();
+    }
+  }, []);
 
   const handleConfirm = () => {
     if (confirmDialog?.type === 'buffer') {
@@ -228,8 +290,7 @@ export function Settings({ currentAdmin, onLogout }: SettingsProps) {
     } else if (confirmDialog?.type === 'otp') {
       handleSaveOtpSettings();
     } else if (confirmDialog?.type === 'calendar') {
-      handleSaveCalendarConnection(false);
-      setConfirmDialog(null);
+      handleDisconnectCalendarConfirm();
     }
   };
 
@@ -797,7 +858,7 @@ export function Settings({ currentAdmin, onLogout }: SettingsProps) {
             ) : (
               <Button 
                 className="bg-blue-600 hover:bg-blue-700"
-                onClick={() => handleSaveCalendarConnection(true)}
+                onClick={handleConnectCalendar}
                 disabled={isSubmitting || isLoadingSettings}
               >
                 Connect

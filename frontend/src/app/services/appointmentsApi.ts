@@ -146,6 +146,7 @@ class AppointmentsApi {
     serviceId: string;
     from?: string;
     days?: number;
+    excludeAppointmentId?: string;
   }): Promise<
     {
       start: string;
@@ -160,6 +161,7 @@ class AppointmentsApi {
     };
     if (params.from) query.from = params.from;
     if (params.days) query.days = String(params.days);
+    if (params.excludeAppointmentId) query.excludeAppointmentId = params.excludeAppointmentId;
 
     const slots = await apiClient.get<
       {

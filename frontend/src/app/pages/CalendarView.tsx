@@ -1,11 +1,14 @@
 import { useEffect, useMemo, useState } from 'react';
-import { ChevronLeft, ChevronRight, Plus, RefreshCw } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Plus, RefreshCw, Calendar as CalendarIcon, Clock } from 'lucide-react';
 import { Button } from '../components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../components/ui/select';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '../components/ui/dialog';
 import { Input } from '../components/ui/input';
 import { Label } from '../components/ui/label';
+import { Calendar } from '../components/ui/calendar';
+import { Popover, PopoverContent, PopoverTrigger } from '../components/ui/popover';
+import { format } from 'date-fns';
 import { AppointmentDrawer } from '../components/AppointmentDrawer';
 import { Appointment, AppointmentStatus, Doctor, Admin } from '../data/types';
 import { appointmentsApi } from '../services/appointmentsApi';
@@ -38,6 +41,11 @@ export function CalendarView({ onCreateAppointment, currentAdmin }: CalendarView
   });
   const [isRescheduling, setIsRescheduling] = useState(false);
   const [isCancelling, setIsCancelling] = useState(false);
+  const [availableSlots, setAvailableSlots] = useState<{ start: string; end: string; date: string; time: string }[]>([]);
+  const [isLoadingSlots, setIsLoadingSlots] = useState(false);
+  const [slotsError, setSlotsError] = useState<string | null>(null);
+  const [calendarOpen, setCalendarOpen] = useState(false);
+  const [timePopoverOpen, setTimePopoverOpen] = useState(false);
 
   const timeSlots = Array.from({ length: 10 }, (_, i) => {
     const hour = i + 9; // 9 AM to 6 PM
@@ -262,6 +270,69 @@ export function CalendarView({ onCreateAppointment, currentAdmin }: CalendarView
     }
   };
 
+  // Load available slots when reschedule dialog opens
+  useEffect(() => {
+    const loadSlots = async () => {
+      if (!rescheduleOpen || !rescheduleAppointmentId) {
+        setAvailableSlots([]);
+        setSlotsError(null);
+        return;
+      }
+
+      const appointment = appointments.find(a => a.id === rescheduleAppointmentId);
+      if (!appointment) {
+        setAvailableSlots([]);
+        return;
+      }
+
+      setIsLoadingSlots(true);
+      setSlotsError(null);
+      try {
+        const slots = await appointmentsApi.getAvailability({
+          doctorId: appointment.doctorId,
+          serviceId: appointment.serviceId,
+          excludeAppointmentId: rescheduleAppointmentId, // Exclude current appointment from conflicts
+        });
+        setAvailableSlots(slots);
+      } catch (err) {
+        console.error('Failed to load availability', err);
+        setSlotsError('Could not load availability for this doctor/service.');
+        setAvailableSlots([]);
+      } finally {
+        setIsLoadingSlots(false);
+      }
+    };
+
+    void loadSlots();
+  }, [rescheduleOpen, rescheduleAppointmentId, appointments]);
+
+  const availableDates = useMemo(
+    () => Array.from(new Set(availableSlots.map((s) => s.date))),
+    [availableSlots],
+  );
+
+  const selectedDate = useMemo(() => {
+    if (!rescheduleForm.date) return undefined;
+    const [year, month, day] = rescheduleForm.date.split("-").map(Number);
+    return new Date(year, month - 1, day);
+  }, [rescheduleForm.date]);
+
+  const isDateDisabled = (date: Date) => {
+    const dateStr = format(date, "yyyy-MM-dd");
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    if (date < today) return true;
+    return !availableDates.includes(dateStr);
+  };
+
+  const availableTimesForDate = useMemo(() => {
+    if (!rescheduleForm.date) return [];
+    return availableSlots
+      .filter((s) => s.date === rescheduleForm.date)
+      .map((s) => s.time)
+      .sort();
+  }, [availableSlots, rescheduleForm.date]);
+
   const handleSaveReschedule = async () => {
     await rescheduleAppointmentFlow({
       appointmentId: rescheduleAppointmentId,
@@ -313,7 +384,7 @@ export function CalendarView({ onCreateAppointment, currentAdmin }: CalendarView
               {isCancelling ? 'Cancelling...' : 'Cancel Past Appointments'}
             </Button>
           )}
-          <Button onClick={onCreateAppointment} className="bg-[rgb(203,255,143)] hover:bg-[#AEEF5A]">
+          <Button onClick={() => onCreateAppointment()} className="bg-[rgb(203,255,143)] hover:bg-[#AEEF5A]">
             <Plus className="h-4 w-4 mr-2" />
             New Appointment
           </Button>
@@ -573,7 +644,15 @@ export function CalendarView({ onCreateAppointment, currentAdmin }: CalendarView
       />
 
       {/* Reschedule Dialog */}
-      <Dialog open={rescheduleOpen} onOpenChange={setRescheduleOpen}>
+      <Dialog open={rescheduleOpen} onOpenChange={(open) => {
+        setRescheduleOpen(open);
+        if (!open) {
+          setRescheduleAppointmentId(null);
+          setRescheduleForm({ date: '', time: '' });
+          setAvailableSlots([]);
+          setSlotsError(null);
+        }
+      }}>
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Reschedule Appointment</DialogTitle>
@@ -581,26 +660,155 @@ export function CalendarView({ onCreateAppointment, currentAdmin }: CalendarView
               Select a new date and time for this appointment.
             </DialogDescription>
           </DialogHeader>
-          <div className="space-y-4 py-4">
-            <div className="space-y-2">
-              <Label htmlFor="reschedule-date">Date *</Label>
-              <Input
-                id="reschedule-date"
-                type="date"
-                value={rescheduleForm.date}
-                onChange={(e) => setRescheduleForm(prev => ({ ...prev, date: e.target.value }))}
-                min={new Date().toISOString().split('T')[0]}
-              />
+          <div className="grid gap-4 py-4">
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div className="space-y-2">
+                <Label htmlFor="date">Date *</Label>
+                <Popover open={calendarOpen} onOpenChange={setCalendarOpen}>
+                  <PopoverTrigger asChild>
+                    <Button
+                      id="date"
+                      variant="outline"
+                      className="w-full justify-start text-left font-normal"
+                      disabled={
+                        isRescheduling ||
+                        isLoadingSlots ||
+                        availableDates.length === 0
+                      }
+                    >
+                      <CalendarIcon className="mr-2 h-4 w-4" />
+                      {selectedDate ? (
+                        format(selectedDate, "PPP")
+                      ) : (
+                        <span className="text-muted-foreground">
+                          {isLoadingSlots
+                            ? "Loading..."
+                            : availableDates.length === 0
+                            ? "No dates available"
+                            : "Pick a date"}
+                        </span>
+                      )}
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-auto p-0" align="start">
+                    <Calendar
+                      mode="single"
+                      selected={selectedDate}
+                      onSelect={(date) => {
+                        if (date) {
+                          const dateStr = format(date, "yyyy-MM-dd");
+                          setRescheduleForm({
+                            ...rescheduleForm,
+                            date: dateStr,
+                            time: "",
+                          });
+                          setCalendarOpen(false);
+                        }
+                      }}
+                      disabled={(date) => {
+                        const today = new Date();
+                        today.setHours(0, 0, 0, 0);
+                        if (date < today) return true;
+                        return isDateDisabled(date);
+                      }}
+                      initialFocus
+                    />
+                  </PopoverContent>
+                </Popover>
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="time">Time *</Label>
+                <div className="relative">
+                  <Input
+                    id="time"
+                    type="time"
+                    value={rescheduleForm.time}
+                    onChange={(e) =>
+                      setRescheduleForm({
+                        ...rescheduleForm,
+                        time: e.target.value,
+                      })
+                    }
+                    disabled={
+                      isRescheduling ||
+                      !rescheduleForm.date ||
+                      availableTimesForDate.length === 0 ||
+                      isLoadingSlots
+                    }
+                    className="pr-10"
+                    list={rescheduleForm.date && availableTimesForDate.length > 0 ? `available-times-${rescheduleForm.date}` : undefined}
+                  />
+                  <Clock className="absolute right-3 top-1/2 -translate-y-1/2 h-5 w-5 text-blue-600 pointer-events-none" />
+                  {rescheduleForm.date && availableTimesForDate.length > 0 && (
+                    <datalist id={`available-times-${rescheduleForm.date}`}>
+                      {availableTimesForDate.map((time) => (
+                        <option key={time} value={time} />
+                      ))}
+                    </datalist>
+                  )}
+                </div>
+                {rescheduleForm.date && availableTimesForDate.length > 0 && (
+                  <Popover open={timePopoverOpen} onOpenChange={setTimePopoverOpen}>
+                    <PopoverTrigger asChild>
+                      <button
+                        type="button"
+                        className="text-xs text-blue-600 hover:text-blue-700 underline"
+                      >
+                        View all available times ({availableTimesForDate.length})
+                      </button>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-auto p-2" align="start">
+                      <div className="max-h-48 overflow-y-auto">
+                        <p className="text-xs font-medium mb-2">Available times:</p>
+                        <div className="grid grid-cols-3 gap-1">
+                          {availableTimesForDate.map((time) => {
+                            const [hours, minutes] = time.split(':').map(Number);
+                            const date = new Date();
+                            date.setHours(hours, minutes, 0, 0);
+                            const time12Hour = format(date, 'h:mm a');
+
+                            return (
+                              <button
+                                key={time}
+                                type="button"
+                                onClick={() => {
+                                  setRescheduleForm({
+                                    ...rescheduleForm,
+                                    time: time,
+                                  });
+                                  setTimePopoverOpen(false);
+                                }}
+                                className={`text-xs px-2 py-1 rounded border ${
+                                  rescheduleForm.time === time
+                                    ? "bg-blue-600 text-white border-blue-600"
+                                    : "bg-white text-gray-700 border-gray-300 hover:bg-gray-100"
+                                }`}
+                              >
+                                {time12Hour}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    </PopoverContent>
+                  </Popover>
+                )}
+                {!rescheduleForm.date && (
+                  <p className="text-xs text-muted-foreground">Select date first</p>
+                )}
+                {rescheduleForm.date && isLoadingSlots && (
+                  <p className="text-xs text-muted-foreground">Loading availability...</p>
+                )}
+                {rescheduleForm.date && !isLoadingSlots && availableTimesForDate.length === 0 && (
+                  <p className="text-xs text-red-500">No times available for this date</p>
+                )}
+              </div>
             </div>
-            <div className="space-y-2">
-              <Label htmlFor="reschedule-time">Time *</Label>
-              <Input
-                id="reschedule-time"
-                type="time"
-                value={rescheduleForm.time}
-                onChange={(e) => setRescheduleForm(prev => ({ ...prev, time: e.target.value }))}
-              />
-            </div>
+
+            {slotsError && (
+              <p className="text-sm text-red-500">{slotsError}</p>
+            )}
           </div>
           <DialogFooter>
             <Button

@@ -10,6 +10,7 @@ import { AppointmentsModule } from './appointments/appointments.module';
 import { UsersModule } from './users/users.module';
 import { SeedModule } from './seed/seed.module';
 import { SettingsModule } from './settings/settings.module';
+import { CalendarModule } from './calendar/calendar.module';
 
 @Module({
   imports: [
@@ -39,6 +40,7 @@ import { SettingsModule } from './settings/settings.module';
     UsersModule,
     SeedModule,
     SettingsModule,
+    CalendarModule,
   ],
   controllers: [AppController],
   providers: [AppService],

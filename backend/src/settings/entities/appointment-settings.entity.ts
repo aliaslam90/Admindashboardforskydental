@@ -35,11 +35,23 @@ export class AppointmentSettings {
   @Column({ type: 'boolean', default: false, name: 'calendar_connected' })
   calendar_connected: boolean;
 
+  @Column({ type: 'text', nullable: true, name: 'calendar_access_token' })
+  calendar_access_token: string | null;
+
+  @Column({ type: 'text', nullable: true, name: 'calendar_refresh_token' })
+  calendar_refresh_token: string | null;
+
+  @Column({ type: 'timestamp', nullable: true, name: 'calendar_token_expiry' })
+  calendar_token_expiry: Date | null;
+
+  @Column({ type: 'varchar', length: 255, nullable: true, name: 'calendar_calendar_id' })
+  calendar_calendar_id: string | null;
+
   @Column({ type: 'uuid', nullable: true, name: 'created_by' })
-  created_by: string;
+  created_by: string | null;
 
   @Column({ type: 'uuid', nullable: true, name: 'updated_by' })
-  updated_by: string;
+  updated_by: string | null;
 
   @CreateDateColumn({ name: 'created_at' })
   created_at: Date;

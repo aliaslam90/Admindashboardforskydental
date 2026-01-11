@@ -8,11 +8,13 @@ import { Doctor } from '../doctors/entities/doctor.entity';
 import { Service } from '../services/entities/service.entity';
 import { User } from '../users/entities/user.entity';
 import { SettingsModule } from '../settings/settings.module';
+import { CalendarModule } from '../calendar/calendar.module';
 
 @Module({
   imports: [
     TypeOrmModule.forFeature([Appointment, Patient, Doctor, Service, User]),
     SettingsModule,
+    CalendarModule,
   ],
   controllers: [AppointmentsController],
   providers: [AppointmentsService],
